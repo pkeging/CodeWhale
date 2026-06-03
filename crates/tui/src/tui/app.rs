@@ -712,10 +712,16 @@ fn match_osc8_fragment(chars: &[char], start: usize) -> Option<usize> {
     Some(end)
 }
 
-/// If a Kitty keyboard protocol CSI fragment starts at `chars[start]`,
-/// return its end index (exclusive). Shape: `(ESC)? [ (? | > | < | =)
-/// [0-9;:]* u`. The private-parameter byte (`?`, `>`, `<`, `=`) is what
-/// keeps this distinct from text the user might plausibly type.
+/// If a private-parameter CSI fragment starts at `chars[start]`, return its
+/// end index (exclusive). Shape: `(ESC)? [ (? | > | < | =) [0-9;:]* <final>`
+/// where `<final>` is any ASCII letter. This covers the Kitty keyboard
+/// protocol (`…u`) *and* the DEC private mode set/reset sequences a terminal
+/// emits during a session — bracketed paste (`[?2004h`/`[?2004l`), mouse
+/// capture (`[?1000h`), focus reporting (`[?1004h`), and synchronized output
+/// (`[?2026h`). Those end in `h`/`l`, not `u`, so the old `u`-only terminator
+/// let the leading `[` leak into the composer during dense streaming (#2592,
+/// regression of #1915). The private-parameter byte (`?`, `>`, `<`, `=`) is
+/// what keeps this distinct from text the user might plausibly type.
 fn match_kitty_csi_fragment(chars: &[char], start: usize) -> Option<usize> {
     let after_csi = if chars.get(start) == Some(&'\x1b') && chars.get(start + 1) == Some(&'[') {
         start + 2
@@ -731,16 +737,25 @@ fn match_kitty_csi_fragment(chars: &[char], start: usize) -> Option<usize> {
     }
 
     let mut end = after_csi + 1;
+    let mut saw_param = false;
     while end < chars.len() {
         let ch = chars[end];
-        if ch == 'u' {
-            return Some(end + 1);
-        }
         if ch.is_ascii_digit() || ch == ';' || ch == ':' {
+            saw_param = true;
             end += 1;
             continue;
         }
-        return None;
+        // Final byte. The Kitty keyboard protocol ends in `u` and is valid
+        // with no parameters (`[?u`). DEC private mode set/reset ends in
+        // `h`/`l` and always carries a numeric mode — bracketed paste
+        // (`[?2004h`/`l`), mouse capture (`[?1000h`), focus reporting
+        // (`[?1004h`), synchronized output (`[?2026h`). Require a parameter
+        // before `h`/`l` so ordinary text like `[?help]` is left untouched.
+        return match ch {
+            'u' => Some(end + 1),
+            'h' | 'l' if saw_param => Some(end + 1),
+            _ => None,
+        };
     }
     None
 }
@@ -5416,6 +5431,34 @@ mod tests {
 
         assert_eq!(app.input, "ready ");
         assert_eq!(app.cursor_position, "ready ".chars().count());
+    }
+
+    #[test]
+    fn composer_strips_dec_private_mode_set_reset_fragments() {
+        let mut app = App::new(test_options(false), &Config::default());
+        app.use_mouse_capture = true;
+        app.insert_str("ok ");
+
+        // Regression for #2592: DEC private mode set/reset chatter ends in
+        // `h`/`l`, not `u`, so the `u`-only terminator used to leak the
+        // leading `[`. Bracketed paste, mouse capture, focus reporting, and
+        // synchronized output all leak during dense streaming.
+        app.insert_str("[?2004h[?2004l[?1000h[?1004h[?2026h[?25l");
+
+        assert_eq!(app.input, "ok ");
+        assert_eq!(app.cursor_position, "ok ".chars().count());
+    }
+
+    #[test]
+    fn composer_keeps_bracket_question_word_text() {
+        let mut app = App::new(test_options(false), &Config::default());
+        app.use_mouse_capture = true;
+
+        // The `h`/`l` terminator only counts after a numeric parameter, so
+        // ordinary prose where a letter follows `[?` directly is preserved.
+        app.insert_str("[?help] and [?later]");
+
+        assert_eq!(app.input, "[?help] and [?later]");
     }
 
     #[test]
