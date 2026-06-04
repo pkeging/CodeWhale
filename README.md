@@ -30,6 +30,11 @@ Hugging Face stay explicit. Provider, model, base URL, and credentials are
 separate choices so direct-provider APIs do not get blurred with OpenRouter
 aliases.
 
+The product goal is practical continuity. A long CodeWhale task should survive
+model routing, compaction, shell noise, branch experiments, contributor review,
+and a fresh maintainer session without losing the reason the work started or
+who helped move it forward.
+
 ## Active v0.9 Track
 
 v0.9.0 is not released yet. The current branch is a stewardship lane for making
@@ -44,6 +49,7 @@ areas:
 | Relay and continuity | `/relay`, fork-state handoff, and rich PlanArtifact context preserve the goal, why it matters, evidence, constraints, blockers, changed files, verification state, and the next action. |
 | Transcript calmness | Dense read/search/list-style tool runs can collapse into expandable groups, while failures, running work, shell commands, writes, diffs, plans, and reviews stay visible. |
 | Runtime sessions and workspaces | Branch work extends session/thread runtime APIs, including workspace-aware thread updates, completed-thread session saves, and safer guards around active turns. Treat this as v0.9-track capability until the release ships. |
+| Project context stability | Bounded project-context packs and generated instructions keep large/noisy repositories from turning the first turn into an unbounded filesystem walk. |
 | HarmonyOS / OHOS | The lane carries safe OpenHarmony setup, OHOS platform guards, self-update disablement on OHOS, and target gating for PTY and Starlark execpolicy paths. Full OHOS target builds still require a host with the OpenHarmony native SDK configured. |
 | Nix and Starlark compatibility | Dependency stewardship keeps OHOS builds from pulling incompatible Nix-chain crates through PTY or Starlark paths where those features are gated. |
 | Contributor stewardship | Harvested PRs stay credited, contributor identity mapping is machine-readable, and community gates remain dry-run and human-toned while the branch is reviewed. |
@@ -610,6 +616,28 @@ the reporter as the problem. Recurring contributors should be recognized so the
 automation gets out of their way and the public record shows their repeated
 help.
 
+Current v0.9 track credits:
+
+- **[xyuai](https://github.com/xyuai)** — canonical CodeWhale settings path,
+  provider persistence, provider picker, logout-scope, and MiMo auth cleanup
+  work (#2730, #2714, #2715, #2717, #2718)
+- **[shenjackyuanjie](https://github.com/shenjackyuanjie)** — HarmonyOS /
+  OpenHarmony porting work and MatePad Edge validation trail (#2634)
+- **[HUQIANTAO](https://github.com/HUQIANTAO)** — `web_run` cache-state
+  lock-splitting and turn-metadata prefix-cache stability work (#2502, #2517)
+- **[idling11](https://github.com/idling11)** — PlanArtifact continuity and
+  dense tool-call transcript collapse direction (#2733, #2738, #2692)
+- **[h3c-hexin](https://github.com/h3c-hexin)** — sub-agent model inheritance,
+  configured `skills_dir` discovery, and prompt-environment stability work
+  (#2736, #2737)
+- **[gaord](https://github.com/gaord)** — runtime thread workspace updates and
+  completed-thread saved-session API work (#2640, #2639)
+- **[cyq1017](https://github.com/cyq1017)** — restore-listing and
+  pending-input delivery-mode label work (#2513, #2532, #2054)
+- **[NASLXTO](https://github.com/NASLXTO)** and
+  **[wuxixing](https://github.com/wuxixing)** — large-workspace startup
+  reports that shaped the bounded project-context fallback (#697, #1827)
+
 Current and recurring contributors include:
 
 - **[merchloubna70-dot](https://github.com/merchloubna70-dot)** — 28 PRs spanning features, fixes, and VS Code extension scaffolding (#645–#681)
@@ -721,6 +749,21 @@ credit: **[@buko](https://github.com/buko)**, **[@yyyCode](https://github.com/yy
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests welcome — check the [open issues](https://github.com/Hmbown/CodeWhale/issues) for good first contributions.
+
+CodeWhale gets a lot of good reports and PRs. The maintainer posture is to keep
+that door open while protecting release quality:
+
+- Issues should stay human-readable and actionable. Intake automation is
+  advisory unless a maintainer deliberately enables enforcement.
+- PRs are reviewed from code, tests, linked issues, and runtime behavior, not
+  from title alone.
+- If a PR is too broad to merge directly, maintainers may harvest the safe part
+  into a narrower branch, then credit the author and explain what landed.
+- Co-author trailers should use mappable GitHub noreply identities from
+  `.github/AUTHOR_MAP`; reporters and repro authors should be thanked in
+  changelogs, release notes, and closure comments.
+- Recurring contributors can be added to `.github/APPROVED_CONTRIBUTORS` so
+  dry-run gates stay out of their way.
 
 Support: [Buy me a coffee](https://www.buymeacoffee.com/hmbown).
 
