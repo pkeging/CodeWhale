@@ -60,7 +60,7 @@ impl HotbarActionRegistry {
             .insert(action.id().to_string(), Arc::new(action));
     }
 
-    pub fn register_builtins(&mut self) {
+    pub(crate) fn register_builtins(&mut self) {
         self.register(AppHotbarAction::new(
             "voice.toggle",
             "voice",
@@ -184,7 +184,9 @@ impl HotbarAction for AppHotbarAction {
             AppHotbarKind::VoiceToggle => false,
             AppHotbarKind::SessionCompact => app.is_compacting,
             AppHotbarKind::Mode(mode) => app.mode == mode,
-            AppHotbarKind::ReasoningCycle => false,
+            AppHotbarKind::ReasoningCycle => {
+                !app.auto_model && app.reasoning_effort != crate::tui::app::ReasoningEffort::Off
+            }
             AppHotbarKind::SidebarToggle => app.sidebar_focus != SidebarFocus::Hidden,
             AppHotbarKind::FileTreeToggle => app.file_tree.is_some(),
             AppHotbarKind::PaletteOpen => false,
@@ -200,6 +202,10 @@ impl HotbarAction for AppHotbarAction {
                 Ok(HotbarDispatch::Handled)
             }
             AppHotbarKind::SessionCompact => {
+                if app.is_compacting {
+                    app.status_message = Some("Compaction is already running.".to_string());
+                    return Ok(HotbarDispatch::Handled);
+                }
                 Ok(HotbarDispatch::AppAction(AppAction::CompactContext))
             }
             AppHotbarKind::Mode(mode) => {
@@ -390,6 +396,16 @@ mod tests {
         );
         app.is_compacting = true;
         assert!(compact.is_active(&app));
+        assert_eq!(
+            compact
+                .dispatch(&mut app)
+                .expect("dispatch compact while busy"),
+            HotbarDispatch::Handled
+        );
+        assert_eq!(
+            app.status_message.as_deref(),
+            Some("Compaction is already running.")
+        );
     }
 
     #[test]
@@ -405,10 +421,15 @@ mod tests {
             HotbarDispatch::AppAction(AppAction::UpdateCompaction(_))
         ));
         assert_eq!(app.reasoning_effort, ReasoningEffort::High);
+        assert!(reasoning.is_active(&app));
         assert_eq!(
             app.status_message.as_deref(),
             Some("Reasoning effort: high")
         );
+
+        app.auto_model = true;
+        assert!(!reasoning.is_active(&app));
+        assert!(reasoning.dispatch(&mut app).is_err());
     }
 
     #[test]
