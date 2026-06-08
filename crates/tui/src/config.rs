@@ -144,6 +144,8 @@ pub const DEFAULT_HUGGINGFACE_FLASH_MODEL: &str = "deepseek-ai/DeepSeek-V4-Flash
 pub const DEFAULT_HUGGINGFACE_BASE_URL: &str = "https://router.huggingface.co/v1";
 pub const DEFAULT_TOGETHER_MODEL: &str = "deepseek-ai/DeepSeek-V4-Pro";
 pub const DEFAULT_TOGETHER_BASE_URL: &str = "https://api.together.xyz/v1";
+pub const DEFAULT_OPENAI_CODEX_MODEL: &str = "gpt-5.5";
+pub const DEFAULT_OPENAI_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api";
 /// Legacy `deepseek-cn` provider alias.
 ///
 /// DeepSeek's official API host is the same worldwide. Keep this alias for
@@ -185,6 +187,7 @@ pub enum ApiProvider {
     Ollama,
     Huggingface,
     Together,
+    OpenaiCodex,
 }
 
 impl ApiProvider {
@@ -234,6 +237,8 @@ impl ApiProvider {
             "ollama" | "ollama-local" => Some(Self::Ollama),
             "huggingface" | "hugging-face" | "hugging_face" | "hf" => Some(Self::Huggingface),
             "together" | "together-ai" | "together_ai" => Some(Self::Together),
+            "openai-codex" | "openai_codex" | "openaicodex" | "codex" | "chatgpt"
+            | "chatgpt-codex" | "chatgpt_codex" | "chatgptcodex" => Some(Self::OpenaiCodex),
             _ => None,
         }
     }
@@ -261,6 +266,7 @@ impl ApiProvider {
             Self::Ollama => "ollama",
             Self::Huggingface => "huggingface",
             Self::Together => "together",
+            Self::OpenaiCodex => "openai-codex",
         }
     }
 
@@ -288,6 +294,7 @@ impl ApiProvider {
             Self::Ollama => "Ollama",
             Self::Huggingface => "Hugging Face",
             Self::Together => "Together AI",
+            Self::OpenaiCodex => "OpenAI Codex (ChatGPT)",
         }
     }
 
@@ -314,6 +321,7 @@ impl ApiProvider {
             Self::Ollama,
             Self::Huggingface,
             Self::Together,
+            Self::OpenaiCodex,
         ]
     }
 }
@@ -817,6 +825,7 @@ pub fn model_completion_names_for_provider(provider: ApiProvider) -> Vec<&'stati
         ApiProvider::Ollama => Vec::new(),
         ApiProvider::Openai | ApiProvider::Atlascloud => OFFICIAL_DEEPSEEK_MODELS.to_vec(),
         ApiProvider::Together => vec![DEFAULT_TOGETHER_MODEL],
+        ApiProvider::OpenaiCodex => vec![DEFAULT_OPENAI_CODEX_MODEL],
     }
 }
 
@@ -1958,6 +1967,8 @@ pub struct ProvidersConfig {
     pub huggingface: ProviderConfig,
     #[serde(default, alias = "together-ai")]
     pub together: ProviderConfig,
+    #[serde(default, alias = "openai-codex", alias = "codex", alias = "chatgpt")]
+    pub openai_codex: ProviderConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -2122,6 +2133,7 @@ impl Config {
             ApiProvider::Huggingface => "providers.huggingface",
             ApiProvider::NvidiaNim => "providers.nvidia_nim",
             ApiProvider::Together => "providers.together",
+            ApiProvider::OpenaiCodex => "providers.openai_codex",
             ApiProvider::Deepseek | ApiProvider::DeepseekCN => return,
         };
         tracing::warn!(
@@ -2270,6 +2282,7 @@ impl Config {
             ApiProvider::Volcengine => &providers.volcengine,
             ApiProvider::Huggingface => &providers.huggingface,
             ApiProvider::Together => &providers.together,
+            ApiProvider::OpenaiCodex => &providers.openai_codex,
         })
     }
 
@@ -2295,6 +2308,7 @@ impl Config {
             ApiProvider::Volcengine => &mut providers.volcengine,
             ApiProvider::Huggingface => &mut providers.huggingface,
             ApiProvider::Together => &mut providers.together,
+            ApiProvider::OpenaiCodex => &mut providers.openai_codex,
         }
     }
 
@@ -2407,6 +2421,7 @@ impl Config {
             ApiProvider::Volcengine => DEFAULT_VOLCENGINE_MODEL,
             ApiProvider::Huggingface => DEFAULT_HUGGINGFACE_MODEL,
             ApiProvider::Together => DEFAULT_TOGETHER_MODEL,
+            ApiProvider::OpenaiCodex => DEFAULT_OPENAI_CODEX_MODEL,
         }
         .to_string()
     }
@@ -2445,7 +2460,8 @@ impl Config {
             |             ApiProvider::Ollama
             | ApiProvider::Volcengine
             | ApiProvider::Huggingface
-            | ApiProvider::Together => None,
+            | ApiProvider::Together
+            | ApiProvider::OpenaiCodex => None,
         };
         let configured_base_url = provider_base.or(root_base);
         let base = if provider == ApiProvider::XiaomiMimo {
@@ -2491,6 +2507,7 @@ impl Config {
                     ApiProvider::Volcengine => DEFAULT_VOLCENGINE_BASE_URL,
                     ApiProvider::Huggingface => DEFAULT_HUGGINGFACE_BASE_URL,
                     ApiProvider::Together => DEFAULT_TOGETHER_BASE_URL,
+                    ApiProvider::OpenaiCodex => DEFAULT_OPENAI_CODEX_BASE_URL,
                 }
                 .to_string()
             })
@@ -2539,6 +2556,7 @@ impl Config {
             ApiProvider::Volcengine => "volcengine",
             ApiProvider::Huggingface => "huggingface",
             ApiProvider::Together => "together",
+            ApiProvider::OpenaiCodex => "openai_codex",
         };
 
         // 0. DeepSeek compatibility slot. The legacy top-level `api_key`
@@ -2558,6 +2576,15 @@ impl Config {
                 .is_some_and(provider_config_uses_kimi_oauth)
         {
             return kimi_cli_oauth_access_token();
+        }
+
+        // OpenAI Codex (ChatGPT) reuses the existing Codex CLI OAuth login.
+        // The access token lives in ~/.codex/auth.json (refreshed on demand)
+        // rather than a stored API key, so resolve it before the config-file
+        // and env slots. Explicit env overrides are handled inside
+        // `codex_access_token`.
+        if provider == ApiProvider::OpenaiCodex {
+            return crate::oauth::codex_access_token();
         }
 
         // 1. Config file (provider-scoped slot). This intentionally wins
@@ -2681,6 +2708,16 @@ impl Config {
             ApiProvider::Together => anyhow::bail!(
                 "Together AI API key not found. Run 'codewhale auth set --provider together', \
                  set TOGETHER_API_KEY, or add [providers.together] api_key in ~/.codewhale/config.toml."
+            ),
+            ApiProvider::OpenaiCodex => anyhow::bail!(
+                "OpenAI Codex OAuth credentials not found.\n\
+                 \n\
+                 CodeWhale uses your existing ChatGPT/Codex login.\n\
+                 1. Run: codex login      (or use the Codex CLI to authenticate)\n\
+                 2. CodeWhale will read credentials from ~/.codex/auth.json\n\
+                 \n\
+                 Env overrides:\n\
+                   OPENAI_CODEX_ACCESS_TOKEN  or  CODEX_ACCESS_TOKEN"
             ),
             // Self-hosted deployments commonly run without auth on localhost.
             // Return an empty key and let the client omit the Authorization header.
@@ -3488,6 +3525,13 @@ fn apply_env_overrides(config: &mut Config) {
                     .together
                     .base_url = Some(value);
             }
+            ApiProvider::OpenaiCodex => {
+                config
+                    .providers
+                    .get_or_insert_with(ProvidersConfig::default)
+                    .openai_codex
+                    .base_url = Some(value);
+            }
         }
     }
     if matches!(config.api_provider(), ApiProvider::NvidiaNim)
@@ -3695,6 +3739,7 @@ fn apply_env_overrides(config: &mut Config) {
             ApiProvider::Volcengine => &mut providers.volcengine,
             ApiProvider::Huggingface => &mut providers.huggingface,
             ApiProvider::Together => &mut providers.together,
+            ApiProvider::OpenaiCodex => &mut providers.openai_codex,
         };
         let mut provider_headers = entry.http_headers.clone().unwrap_or_default();
         provider_headers.extend(headers);
@@ -3890,6 +3935,7 @@ fn apply_env_overrides(config: &mut Config) {
                 ApiProvider::Volcengine => &mut providers.volcengine,
                 ApiProvider::Huggingface => &mut providers.huggingface,
                 ApiProvider::Together => &mut providers.together,
+                ApiProvider::OpenaiCodex => &mut providers.openai_codex,
             };
             entry.model = Some(value);
         }
@@ -4213,6 +4259,7 @@ fn default_base_url_for_provider(provider: ApiProvider) -> &'static str {
         ApiProvider::Volcengine => DEFAULT_VOLCENGINE_BASE_URL,
         ApiProvider::Huggingface => DEFAULT_HUGGINGFACE_BASE_URL,
         ApiProvider::Together => DEFAULT_TOGETHER_BASE_URL,
+        ApiProvider::OpenaiCodex => DEFAULT_OPENAI_CODEX_BASE_URL,
     }
 }
 
@@ -4635,6 +4682,7 @@ fn merge_providers(
             volcengine: merge_provider_config(base.volcengine, override_cfg.volcengine),
             huggingface: merge_provider_config(base.huggingface, override_cfg.huggingface),
             together: merge_provider_config(base.together, override_cfg.together),
+            openai_codex: merge_provider_config(base.openai_codex, override_cfg.openai_codex),
         }),
     }
 }
@@ -5049,6 +5097,12 @@ pub fn active_provider_has_config_api_key(config: &Config) -> bool {
     {
         return kimi_cli_credentials_present();
     }
+    if provider == ApiProvider::OpenaiCodex {
+        // The persistent Codex login is the OAuth credential file, analogous to
+        // a stored config key. Token env overrides are scored separately by
+        // active_provider_has_env_api_key.
+        return crate::oauth::auth_file_path().exists();
+    }
     if matches!(provider, ApiProvider::Huggingface)
         && std::env::var("HF_TOKEN").is_ok_and(|k| !k.trim().is_empty())
     {
@@ -5124,6 +5178,10 @@ pub fn active_provider_has_env_api_key(config: &Config) -> bool {
         ApiProvider::Together => {
             std::env::var("TOGETHER_API_KEY").is_ok_and(|k| !k.trim().is_empty())
         }
+        ApiProvider::OpenaiCodex => {
+            std::env::var("OPENAI_CODEX_ACCESS_TOKEN").is_ok_and(|k| !k.trim().is_empty())
+                || std::env::var("CODEX_ACCESS_TOKEN").is_ok_and(|k| !k.trim().is_empty())
+        }
     }
 }
 
@@ -5151,6 +5209,7 @@ pub fn has_api_key_for(config: &Config, provider: ApiProvider) -> bool {
         ApiProvider::Arcee => "ARCEE_API_KEY",
         ApiProvider::Huggingface => "HUGGINGFACE_API_KEY",
         ApiProvider::Together => "TOGETHER_API_KEY",
+        ApiProvider::OpenaiCodex => "OPENAI_CODEX_ACCESS_TOKEN",
         ApiProvider::Moonshot => "MOONSHOT_API_KEY",
         ApiProvider::Sglang => "SGLANG_API_KEY",
         ApiProvider::Vllm => "VLLM_API_KEY",
@@ -5195,6 +5254,11 @@ pub fn has_api_key_for(config: &Config, provider: ApiProvider) -> bool {
             .is_some_and(provider_config_uses_kimi_oauth)
     {
         return kimi_cli_credentials_present();
+    }
+    if provider == ApiProvider::OpenaiCodex {
+        // Any usable Codex credential: either token env override or the Codex
+        // CLI OAuth login on disk.
+        return crate::oauth::credentials_present();
     }
     if matches!(provider, ApiProvider::Huggingface)
         && std::env::var("HF_TOKEN").is_ok_and(|k| !k.trim().is_empty())
@@ -5273,6 +5337,7 @@ pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf>
         ApiProvider::Ollama => "providers.ollama",
         ApiProvider::Volcengine => "providers.volcengine",
         ApiProvider::Together => "providers.together",
+        ApiProvider::OpenaiCodex => "providers.openai_codex",
     };
 
     // Parse existing TOML (or start fresh) so we can edit the right table
@@ -5317,6 +5382,7 @@ pub fn save_api_key_for(provider: ApiProvider, api_key: &str) -> Result<PathBuf>
         ApiProvider::Ollama => "ollama",
         ApiProvider::Volcengine => "volcengine",
         ApiProvider::Together => "together",
+        ApiProvider::OpenaiCodex => "openai_codex",
     };
     let entry = providers
         .entry(key_inside.to_string())
@@ -5413,6 +5479,7 @@ fn provider_config_key(provider: ApiProvider) -> Result<&'static str> {
         ApiProvider::Vllm => Ok("vllm"),
         ApiProvider::Ollama => Ok("ollama"),
         ApiProvider::Together => Ok("together"),
+        ApiProvider::OpenaiCodex => Ok("openai_codex"),
     }
 }
 

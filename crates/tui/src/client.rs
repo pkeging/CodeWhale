@@ -1130,6 +1130,9 @@ impl LlmClient for DeepSeekClient {
         &self,
         request: MessageRequest,
     ) -> Result<crate::llm_client::StreamEventBox> {
+        if self.api_provider == ApiProvider::OpenaiCodex {
+            return self.handle_responses_stream(request).await;
+        }
         self.handle_chat_completion_stream(request).await
     }
 }
@@ -1207,6 +1210,9 @@ pub(super) fn apply_reasoning_effort(
             | ApiProvider::Volcengine
             | ApiProvider::Together => {
                 body["thinking"] = json!({ "type": "disabled" });
+            }
+            ApiProvider::OpenaiCodex => {
+                // OpenAI Codex uses Responses API — thinking handled differently
             }
             ApiProvider::Fireworks => {}
             // vLLM is an OpenAI-protocol server, not an Anthropic-protocol one.
@@ -1291,7 +1297,8 @@ pub(super) fn apply_reasoning_effort(
             | ApiProvider::Atlascloud
             | ApiProvider::WanjieArk
             | ApiProvider::Moonshot
-            | ApiProvider::Ollama => {}
+            | ApiProvider::Ollama
+            | ApiProvider::OpenaiCodex => {}
             ApiProvider::NvidiaNim => {
                 body["chat_template_kwargs"] = json!({
                     "thinking": true,
@@ -1334,7 +1341,8 @@ pub(super) fn apply_reasoning_effort(
             | ApiProvider::Atlascloud
             | ApiProvider::WanjieArk
             | ApiProvider::Moonshot
-            | ApiProvider::Ollama => {}
+            | ApiProvider::Ollama
+            | ApiProvider::OpenaiCodex => {}
             ApiProvider::NvidiaNim => {
                 body["chat_template_kwargs"] = json!({
                     "thinking": true,
@@ -1461,6 +1469,7 @@ impl DeepSeekClient {
 }
 
 mod chat;
+mod responses;
 
 pub(crate) use chat::{CacheWarmupKey, PromptInspection};
 

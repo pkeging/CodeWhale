@@ -50,6 +50,7 @@ mod memory;
 mod model_routing;
 mod models;
 mod network_policy;
+mod oauth;
 mod palette;
 mod prefix_cache;
 mod pricing;
@@ -2048,6 +2049,10 @@ fn run_setup_status(config: &Config, workspace: &Path) -> Result<()> {
                     "TOGETHER_API_KEY",
                     "codewhale auth set --provider together --api-key \"...\"",
                 ),
+                crate::config::ApiProvider::OpenaiCodex => (
+                    "OPENAI_CODEX_ACCESS_TOKEN/CODEX_ACCESS_TOKEN",
+                    "see docs/PROVIDERS.md for ChatGPT/Codex OAuth setup",
+                ),
                 crate::config::ApiProvider::Deepseek | crate::config::ApiProvider::DeepseekCN => {
                     ("DEEPSEEK_API_KEY", "codewhale auth set --provider deepseek")
                 }
@@ -2074,6 +2079,7 @@ fn run_setup_status(config: &Config, workspace: &Path) -> Result<()> {
                     crate::config::ApiProvider::Ollama => "ollama",
                     crate::config::ApiProvider::Huggingface => "huggingface",
                     crate::config::ApiProvider::Together => "together",
+                    crate::config::ApiProvider::OpenaiCodex => "openai_codex",
                     crate::config::ApiProvider::Deepseek
                     | crate::config::ApiProvider::DeepseekCN => "deepseek",
                 }

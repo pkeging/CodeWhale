@@ -7174,6 +7174,7 @@ fn render(f: &mut Frame, app: &mut App) {
             crate::config::ApiProvider::Ollama => Some("Ollama"),
             crate::config::ApiProvider::Huggingface => Some("HF"),
             crate::config::ApiProvider::Together => Some("Together"),
+            crate::config::ApiProvider::OpenaiCodex => Some("Codex"),
         };
         let status_indicator_started_at = if app.low_motion {
             None
@@ -8215,6 +8216,7 @@ async fn apply_provider_picker_api_key(
             ApiProvider::Ollama => &mut providers.ollama,
             ApiProvider::Huggingface => &mut providers.huggingface,
             ApiProvider::Together => &mut providers.together,
+            ApiProvider::OpenaiCodex => &mut providers.openai_codex,
         };
         entry.api_key = Some(api_key);
     }
@@ -8273,6 +8275,7 @@ fn set_provider_auth_mode_in_memory(config: &mut Config, provider: ApiProvider, 
         ApiProvider::Ollama => &mut providers.ollama,
         ApiProvider::Huggingface => &mut providers.huggingface,
         ApiProvider::Together => &mut providers.together,
+        ApiProvider::OpenaiCodex => &mut providers.openai_codex,
     };
     entry.auth_mode = Some(auth_mode);
 }

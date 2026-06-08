@@ -11,7 +11,8 @@ use super::{
     DEFAULT_HUGGINGFACE_MODEL, DEFAULT_MOONSHOT_BASE_URL, DEFAULT_MOONSHOT_MODEL,
     DEFAULT_NOVITA_BASE_URL, DEFAULT_NOVITA_MODEL, DEFAULT_NVIDIA_NIM_BASE_URL,
     DEFAULT_NVIDIA_NIM_MODEL, DEFAULT_OLLAMA_BASE_URL, DEFAULT_OLLAMA_MODEL,
-    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_BASE_URL,
+    DEFAULT_OPENAI_BASE_URL, DEFAULT_OPENAI_CODEX_BASE_URL, DEFAULT_OPENAI_CODEX_MODEL,
+    DEFAULT_OPENAI_MODEL, DEFAULT_OPENROUTER_BASE_URL,
     DEFAULT_OPENROUTER_MODEL, DEFAULT_SGLANG_BASE_URL, DEFAULT_SGLANG_MODEL,
     DEFAULT_SILICONFLOW_BASE_URL, DEFAULT_SILICONFLOW_CN_BASE_URL, DEFAULT_SILICONFLOW_MODEL,
     DEFAULT_TOGETHER_BASE_URL, DEFAULT_TOGETHER_MODEL,
@@ -25,6 +26,8 @@ use super::{
 pub enum WireFormat {
     /// OpenAI-compatible `/v1/chat/completions` style payloads.
     ChatCompletions,
+    /// OpenAI Responses API (`/responses`).
+    Responses,
 }
 
 /// Static metadata for a built-in model provider.
@@ -285,6 +288,39 @@ provider!(
     "together"
 );
 
+/// OpenAI Codex / ChatGPT OAuth provider using the Responses API.
+pub struct OpenaiCodex;
+
+impl Provider for OpenaiCodex {
+    fn kind(&self) -> ProviderKind {
+        ProviderKind::OpenaiCodex
+    }
+
+    fn display_name(&self) -> &'static str {
+        "OpenAI Codex (ChatGPT)"
+    }
+
+    fn default_base_url(&self) -> &'static str {
+        DEFAULT_OPENAI_CODEX_BASE_URL
+    }
+
+    fn default_model(&self) -> &'static str {
+        DEFAULT_OPENAI_CODEX_MODEL
+    }
+
+    fn env_vars(&self) -> &'static [&'static str] {
+        &["OPENAI_CODEX_ACCESS_TOKEN", "CODEX_ACCESS_TOKEN"]
+    }
+
+    fn provider_config_key(&self) -> &'static str {
+        "openai_codex"
+    }
+
+    fn wire(&self) -> WireFormat {
+        WireFormat::Responses
+    }
+}
+
 static DEEPSEEK: Deepseek = Deepseek;
 static NVIDIA_NIM: NvidiaNim = NvidiaNim;
 static OPENAI: Openai = Openai;
@@ -304,8 +340,9 @@ static VLLM: Vllm = Vllm;
 static OLLAMA: Ollama = Ollama;
 static HUGGINGFACE: Huggingface = Huggingface;
 static TOGETHER: Together = Together;
+static OPENAI_CODEX: OpenaiCodex = OpenaiCodex;
 
-static PROVIDER_REGISTRY: [&dyn Provider; 19] = [
+static PROVIDER_REGISTRY: [&dyn Provider; 20] = [
     &DEEPSEEK,
     &NVIDIA_NIM,
     &OPENAI,
@@ -325,6 +362,7 @@ static PROVIDER_REGISTRY: [&dyn Provider; 19] = [
     &OLLAMA,
     &HUGGINGFACE,
     &TOGETHER,
+    &OPENAI_CODEX,
 ];
 
 /// Return all built-in provider metadata entries in `ProviderKind::ALL` order.
@@ -372,5 +410,6 @@ pub fn provider_for_kind(kind: ProviderKind) -> &'static dyn Provider {
         ProviderKind::Ollama => &OLLAMA,
         ProviderKind::Huggingface => &HUGGINGFACE,
         ProviderKind::Together => &TOGETHER,
+        ProviderKind::OpenaiCodex => &OPENAI_CODEX,
     }
 }

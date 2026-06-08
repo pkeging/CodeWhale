@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.55] - 2026-06-08
+
+### Added
+
+- Together AI provider (`[providers.together]`) with picker, auth, and
+  capability support, plus Qwen 3.7 Max, MiniMax 2.7, and NVIDIA Nemotron 3
+  Ultra catalog entries.
+- Experimental OpenAI Codex (ChatGPT) provider (`openai-codex`) that reuses an
+  existing Codex CLI OAuth login from `~/.codex/auth.json` and talks to the
+  OpenAI Responses API. See `docs/PROVIDERS.md`. The live round-trip is not
+  exercised in CI; treat as preview.
+
 ## [0.8.54] - 2026-06-08
 
 ### Added

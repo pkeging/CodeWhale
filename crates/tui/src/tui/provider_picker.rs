@@ -119,6 +119,7 @@ impl ProviderPickerView {
             ApiProvider::Ollama => "OLLAMA_API_KEY",
             ApiProvider::Huggingface => "HUGGINGFACE_API_KEY / HF_TOKEN",
             ApiProvider::Together => "TOGETHER_API_KEY",
+            ApiProvider::OpenaiCodex => "OPENAI_CODEX_ACCESS_TOKEN / CODEX_ACCESS_TOKEN",
         }
     }
 
@@ -510,7 +511,8 @@ mod tests {
                 "vLLM",
                 "Ollama",
                 "Hugging Face",
-                "Together AI"
+                "Together AI",
+                "OpenAI Codex (ChatGPT)"
             ]
         );
     }
@@ -545,7 +547,7 @@ mod tests {
         let mut picker = ProviderPickerView::new(ApiProvider::Deepseek, &config);
 
         picker.handle_key(key(KeyCode::Up));
-        assert_eq!(picker.selected_provider(), ApiProvider::Together);
+        assert_eq!(picker.selected_provider(), ApiProvider::OpenaiCodex);
 
         picker.handle_key(key(KeyCode::Down));
         assert_eq!(picker.selected_provider(), ApiProvider::Deepseek);

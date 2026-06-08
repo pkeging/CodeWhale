@@ -599,6 +599,17 @@ impl Default for ModelRegistry {
                 supports_tools: true,
                 supports_reasoning: true,
             },
+            // OpenAI Codex (ChatGPT OAuth) models
+            ModelInfo {
+                id: "gpt-5.5".to_string(),
+                provider: ProviderKind::OpenaiCodex,
+                aliases: vec![
+                    "codex-gpt-5.5".to_string(),
+                    "chatgpt-gpt-5.5".to_string(),
+                ],
+                supports_tools: true,
+                supports_reasoning: true,
+            },
             // MiniMax 2.7 (OpenRouter)
             ModelInfo {
                 id: "minimax/minimax-2.7".to_string(),

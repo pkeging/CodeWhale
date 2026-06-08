@@ -429,6 +429,18 @@ max_subagents = 10 # optional (1-20)
 # model = "deepseek-ai/DeepSeek-V4-Pro"     # or deepseek-ai/DeepSeek-V4-Flash
 
 # ─────────────────────────────────────────────────────────────────────────────────
+# OpenAI Codex (ChatGPT) Provider — EXPERIMENTAL
+# Reuses your existing ChatGPT/Codex CLI OAuth login. Run `codex login` first;
+# CodeWhale reads and refreshes the access token from ~/.codex/auth.json. No API
+# key is stored here. Talks to the OpenAI Responses API at /codex/responses.
+# Env var aliases: OPENAI_CODEX_ACCESS_TOKEN / CODEX_ACCESS_TOKEN (token override),
+#   OPENAI_CODEX_BASE_URL / CODEX_BASE_URL, OPENAI_CODEX_MODEL / CODEX_MODEL,
+#   OPENAI_CODEX_ACCOUNT_ID / CODEX_ACCOUNT_ID, OPENAI_CODEX_AUTH_FILE, CODEX_HOME
+[providers.openai_codex]
+# base_url = "https://chatgpt.com/backend-api"
+# model = "gpt-5.5"
+
+# ─────────────────────────────────────────────────────────────────────────────────
 # Web Search Provider
 # ─────────────────────────────────────────────────────────────────────────────────
 # Choose which backend `web_search` uses. Default is DuckDuckGo HTML scraping

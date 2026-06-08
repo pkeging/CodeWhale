@@ -766,11 +766,12 @@ fn provider_slot(provider: ProviderKind) -> &'static str {
         ProviderKind::Ollama => "ollama",
         ProviderKind::Huggingface => "huggingface",
         ProviderKind::Together => "together",
+        ProviderKind::OpenaiCodex => "openai-codex",
     }
 }
 
 /// Provider order used by the `auth list` and `auth status` outputs.
-const PROVIDER_LIST: [ProviderKind; 19] = [
+const PROVIDER_LIST: [ProviderKind; 20] = [
     ProviderKind::Deepseek,
     ProviderKind::NvidiaNim,
     ProviderKind::Openai,
@@ -790,6 +791,7 @@ const PROVIDER_LIST: [ProviderKind; 19] = [
     ProviderKind::Ollama,
     ProviderKind::Huggingface,
     ProviderKind::Together,
+    ProviderKind::OpenaiCodex,
 ];
 
 #[cfg(test)]
@@ -862,6 +864,7 @@ fn provider_env_vars(provider: ProviderKind) -> &'static [&'static str] {
             "WANJIE_MAAS_API_KEY",
         ],
         ProviderKind::Together => &["TOGETHER_API_KEY"],
+        ProviderKind::OpenaiCodex => &["OPENAI_CODEX_ACCESS_TOKEN", "CODEX_ACCESS_TOKEN"],
     }
 }
 
