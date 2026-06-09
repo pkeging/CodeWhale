@@ -1533,6 +1533,7 @@ mod tests {
         assert!(prompt.contains("- **Shell**:"));
         assert!(prompt.contains("### `exec_shell`"));
         assert!(prompt.contains("`task_shell_start`"));
+        assert!(prompt.contains(">5 seconds"));
         assert!(prompt.contains("Arithmetic, math, calculations → `exec_shell`"));
     }
 
