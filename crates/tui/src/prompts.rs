@@ -796,7 +796,48 @@ pub(crate) fn render_runtime_policy_reference() -> String {
 /// says "You are deepseek-v4-pro" or "You are deepseek-v4-flash" instead
 /// of a static placeholder.
 fn apply_model_template(prompt: &str, model_id: &str) -> String {
-    prompt.replace("{model_id}", model_id)
+    let mut prompt = prompt.replace("{model_id}", model_id);
+
+    // #3025: Substitute model-specific facts so non-DeepSeek models don't
+    // get V4 architecture claims, 1M-window assumptions, or Flash pricing.
+    let ctx_window = crate::models::context_window_for_model(model_id);
+    let window_note = if let Some(window) = ctx_window {
+        format!(
+            "You have a {}-token context window. Do not summarize or delete \
+             earlier turns just because the transcript has crossed an older \
+             threshold.",
+            if window >= 1_000_000 {
+                "one-million-token".to_string()
+            } else {
+                format!("{}", window)
+            }
+        )
+    } else {
+        "Your context window is provider-dependent and not known to the \
+         harness; treat the app's context-pressure indicator as authoritative \
+         and suggest /compact when it reports high pressure."
+            .to_string()
+    };
+    prompt = prompt.replace("{context_window_note}", &window_note);
+
+    let subagent_econ = crate::pricing::input_cost_note(model_id).unwrap_or_else(|| {
+        "Sub-agents keep your main context clean; use them liberally for \
+         parallel work."
+            .to_string()
+    });
+    prompt = prompt.replace("{subagent_economics}", &subagent_econ);
+
+    let thinking_note = if crate::models::model_supports_reasoning(model_id) {
+        "Models may emit *thinking tokens* before final answers. These are \
+         invisible to the user but count against context. Use them strategically: \
+         skip for lookups, light for simple code generation, deep for debugging."
+            .to_string()
+    } else {
+        String::new()
+    };
+    prompt = prompt.replace("{model_thinking_note}", &thinking_note);
+
+    prompt
 }
 
 const TOOL_TAXONOMY_DISCOVERY: &[&str] = &["grep_files", "file_search"];

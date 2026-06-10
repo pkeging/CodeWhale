@@ -166,6 +166,21 @@ fn deepseek_v4_flash_pricing() -> ModelPricing {
     }
 }
 
+/// Return a one-line cost note for the given model, suitable for the
+/// sub-agent economics section of the system prompt (#3025).
+///
+/// Returns `None` when pricing is unknown — the prompt should use
+/// cost-agnostic wording instead.
+#[must_use]
+pub fn input_cost_note(model: &str) -> Option<String> {
+    let pricing = pricing_for_model(model)?;
+    Some(format!(
+        "Sub-agents are cheap — {} costs ${:.2} per million input tokens.",
+        model,
+        pricing.usd.input_cache_miss_per_million
+    ))
+}
+
 /// Calculate cost for a turn given token usage and model.
 #[must_use]
 #[allow(dead_code)]
