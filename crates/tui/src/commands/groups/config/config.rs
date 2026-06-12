@@ -658,6 +658,7 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
     if let Err(e) = settings.set(&key, value) {
         return CommandResult::error(format!("{e}"));
     }
+    settings.apply_env_overrides();
 
     let mut action = None;
     match key.as_str() {
@@ -835,6 +836,8 @@ pub fn set_config_value(app: &mut App, key: &str, value: &str, persist: bool) ->
             },
         ),
         "composer_vim_mode" | "vim_mode" | "vim" => settings.composer_vim_mode.clone(),
+        "low_motion" | "motion" => settings.low_motion.to_string(),
+        "fancy_animations" | "fancy" | "animations" => settings.fancy_animations.to_string(),
         _ => value.to_string(),
     };
 
@@ -1392,6 +1395,44 @@ mod tests {
             result.message.as_deref(),
             Some("reasoning_effort = xhigh (session only, add --save to persist)")
         );
+    }
+
+    #[test]
+    fn config_fancy_animations_obeys_ghostty_override() {
+        let temp_root = env::temp_dir().join(format!(
+            "codewhale-tui-ghostty-fancy-config-test-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&temp_root).unwrap();
+        let _guard = EnvGuard::new(&temp_root);
+        let prev_term_program = env::var_os("TERM_PROGRAM");
+        // Safety: test-only environment mutation guarded by EnvGuard's lock.
+        unsafe {
+            env::set_var("TERM_PROGRAM", "Ghostty");
+        }
+
+        let mut app = create_test_app();
+        assert!(!app.fancy_animations);
+
+        let result = set_config_value(&mut app, "fancy_animations", "true", false);
+
+        assert!(!result.is_error);
+        assert!(
+            !app.fancy_animations,
+            "Ghostty compatibility override must keep the water strip disabled"
+        );
+        assert_eq!(
+            result.message.as_deref(),
+            Some("fancy_animations = false (session only, add --save to persist)")
+        );
+
+        // Safety: cleanup under EnvGuard's lock.
+        unsafe {
+            match prev_term_program {
+                Some(v) => env::set_var("TERM_PROGRAM", v),
+                None => env::remove_var("TERM_PROGRAM"),
+            }
+        }
     }
 
     #[test]
