@@ -1,14 +1,30 @@
 # Sub-Agents
 
-Sub-agents are persistent background instances of the agent loop. The parent
-opens one with a focused task, gets back an `agent_id` and session name
-immediately, and continues working while the sub-agent runs to completion.
-Sub-agents inherit the parent's tool registry by default. `agent_open`
-launches them as detached background work: cancelling the parent turn stops the
-parent wait/eval path, but it does not kill already-opened child sessions. Use
+Sub-agents are the user-facing vocabulary for nested worker assignments: a
+parent opens a focused role (`explore`, `review`, `implementer`, `verifier`,
+...) and gets back an `agent_id` plus session name while the worker runs.
+
+Architecturally, sub-agents should not be a second execution substrate. The
+durable primitive is the fleet-backed worker run described in
+[`AGENT_RUNTIME.md`](AGENT_RUNTIME.md): retries, terminal status, receipts,
+artifact refs, inspection, and restart behavior belong there. `agent_open`
+stays as the familiar nested-agent launcher, but detached work should converge
+on the same lifecycle as Agent Fleet.
+
+The current `agent_open` implementation is a compatibility path while that
+cutover completes. It can still be useful for short in-session delegation, but
+if a child fails once on a transient provider timeout while an equivalent fleet
+worker would retry from the ledger, that is a runtime unification gap. For work
+that must survive provider hiccups, process restarts, sleep, or remote
+execution, prefer Fleet or a WhaleFlow-backed fleet run.
+
+Sub-agents inherit the parent's tool registry by default. `agent_open` launches
+them as detached background work: cancelling the parent turn stops the parent
+wait/eval path, but it does not kill already-opened child sessions. Use
 `agent_close` to cancel a running child explicitly.
 
-This doc covers the role taxonomy. The active orchestration surface is
+This doc covers the role taxonomy and current compatibility controls. The active
+orchestration surface is
 `agent_open`, `agent_eval`, and `agent_close`; see `prompts/base.md`
 "Sub-Agent Strategy" and the in-line tool descriptions.
 
@@ -112,7 +128,7 @@ the next turn.
 
 ## Concurrency cap
 
-The dispatcher caps concurrent sub-agents at 10 by default
+The current compatibility dispatcher caps concurrent sub-agents at 10 by default
 (configurable via `[subagents].max_concurrent` in `~/.codewhale/config.toml`,
 hard ceiling 20). When the parent hits the cap, `agent_open` returns
 an error with the cap value; the parent should use `agent_eval` to wait for a
@@ -230,9 +246,10 @@ manager can't match them to the current boot.
 
 ## Run receipts, follow-up, and takeover
 
-Each sub-agent has a persisted worker record in
+Each compatibility sub-agent has a persisted worker record in
 `.codewhale/state/subagents.v1.json`. The record is the current run-ledger
-slice for sub-agent lanes: it stores `run_id`, objective, role/model,
+slice for sub-agent lanes until those lanes are backed directly by the fleet
+ledger: it stores `run_id`, objective, role/model,
 workspace/branch, lifecycle events, artifact refs, follow-up target, takeover
 target, usage provenance, and verification provenance.
 

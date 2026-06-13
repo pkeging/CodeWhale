@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supports Ctrl+P/Ctrl+N movement without letting the global file picker steal
   focus while the menu is open. Thanks @1Git2Clone for the PR.
 
+### Changed
+
+- **README and contributor credits.** The README now has a shorter public
+  overview and moves the full contributor ledger to `docs/CONTRIBUTORS.md`,
+  preserving public thanks for [DeepSeek](https://github.com/deepseek-ai),
+  [DataWhale](https://github.com/datawhalechina),
+  [OpenWarp](https://github.com/zerx-lab/warp), and
+  [Open Design](https://github.com/nexu-io/open-design).
+- **Fleet-backed sub-agent direction.** Runtime docs now state the intended
+  cutover clearly: "sub-agent" is role/UX vocabulary, while durable detached
+  work should converge on the fleet-backed worker lifecycle with retries,
+  receipts, and ledgered inspection.
+
 ### Fixed
 
 - **Z.ai GLM thinking traces.** Direct Z.ai requests now use the documented

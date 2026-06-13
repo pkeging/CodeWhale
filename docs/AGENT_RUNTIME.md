@@ -1,15 +1,19 @@
-# The CodeWhale Agent Runtime — one substrate, three launchers
+# The CodeWhale Agent Runtime — one durable substrate, familiar launchers
 
-This document explains how sub-agents, the headless `exec` path, and the Agent
-Fleet relate. It exists because these had drifted into *two* parallel "worker"
-systems, and the fix is to treat them as **one**. It also answers the
-open direction question in #2972 ("how much Claude Code convergence is right?").
+This document explains how sub-agents, the headless `exec` path, and Agent Fleet
+relate. It exists because these had drifted into *two* parallel "worker"
+systems, and the fix is to make the **fleet-backed worker run** the durable
+primitive. "Sub-agent" remains useful product vocabulary for a nested role, but
+it must not imply a separate execution substrate with weaker lifecycle
+semantics. It also answers the open direction question in #2972 ("how much
+Claude Code convergence is right?").
 
 ## The core idea
 
-There is exactly **one** thing that runs work: a **headless agent runtime** — a
-model loop with the full (policy-gated) tool surface that can, in turn, spawn
-its own sub-agents. Everything else is just a different way to *launch* that one
+There is exactly **one** thing that runs detached agent work: a **headless agent
+runtime** wrapped in a durable worker lifecycle. It is a model loop with the
+full (policy-gated) tool surface that can, in turn, delegate child work through
+the same lifecycle. Everything else is just a different way to *launch* that one
 runtime, or a different way to *observe* it.
 
 ```
@@ -30,8 +34,10 @@ runtime, or a different way to *observe* it.
                                                  └───────────────────────┘
 ```
 
-- A **sub-agent** is a *nested* run of the same runtime, launched from inside
-  any agent process via `agent_open`. Same spec, same events, same depth axis.
+- A **sub-agent** is the user-facing name for a *nested assignment* with a role
+  (`explore`, `review`, `implementer`, `verifier`, ...). It should be backed by
+  the same worker run lifecycle as fleet. `agent_open` is the compatibility
+  launcher, not a second runtime.
 - **`codewhale exec`** is the headless front door: usable by anyone at any time
   (CI, scripts, another agent), full tools, emits a `stream-json` event stream,
   and can spawn sub-agents. It is *the* runtime with a CLI on it.
@@ -41,8 +47,29 @@ runtime, or a different way to *observe* it.
   adds **orchestration** (durable ledger, scheduling/leasing/retry, host
   transport, alert escalation) *over* the one runtime.
 
-So "fleet vs sub-agent" is not two categories. It is **the same headless run**,
-differing only in *where it was launched from* and *how durably it is tracked*.
+So "fleet vs sub-agent" is not two categories. It is **the same headless run**:
+Fleet is the durable control plane, while sub-agent is the role/UX vocabulary
+for a nested worker.
+
+## The cutover rule
+
+If a detached `agent_open` child can fail on a one-off provider timeout with no
+retry while an equivalent fleet worker would retry and preserve ledger evidence,
+then the cutover is incomplete. Treat that as a CodeWhale runtime gap, not as
+normal "sub-agent behavior".
+
+The target rule is:
+
+- durable or long-running work goes through the fleet worker lifecycle;
+- `agent_open` may stay as the friendly nested-agent API, but it should enqueue
+  or observe a fleet-backed worker run instead of owning an independent
+  lifecycle;
+- in-process children are allowed only as a small compatibility/latency
+  optimization, and they must expose the same terminal states, retry semantics,
+  receipts, and inspection handles as the fleet path.
+
+In product language it is fine to say "open a sub-agent". In architecture
+language that means "start a nested fleet worker with this role".
 
 ## Why this shape (and why it fixes the lag)
 
@@ -107,10 +134,10 @@ CodeWhale should converge with Claude Code on **shape**, not on branding:
   multi-provider support; the local-first **Agent Fleet** (durable, SSH-capable
   orchestration) as CodeWhale's own layer above the shared runtime; WhaleFlow as
   the orchestration overlay.
-- **Do not** fork execution semantics per surface. The TUI, `exec`, the Runtime
-  API, and the fleet must all drive the *same* runtime and observe the *same*
-  event stream — divergence there is what produced the "two moving targets" this
-  document exists to prevent.
+- **Do not** fork execution semantics per surface. The TUI, `agent_open`,
+  `exec`, the Runtime API, and the fleet must all drive the *same* runtime and
+  observe the *same* event stream — divergence there is what produced the "two
+  moving targets" this document exists to prevent.
 
 The litmus test for any new agent surface: *does it launch and observe the one
 runtime, or does it invent a second one?* Only the former is allowed.
