@@ -10087,3 +10087,40 @@ fn throttled_progress_event_does_not_cancel_other_events_redraw() {
         "a lone throttled progress event must not trigger a repaint"
     );
 }
+
+#[test]
+fn agent_progress_redraw_coalesces_once_per_agent_per_drain() {
+    let t0 = Instant::now();
+    let mut last_redraw = None;
+    let mut seen_agents = HashSet::new();
+
+    assert!(
+        agent_progress_redraw_permitted_for_drain(
+            &mut last_redraw,
+            &mut seen_agents,
+            "agent-a",
+            t0,
+        ),
+        "first progress event for an agent in a drain may repaint"
+    );
+    assert!(
+        !agent_progress_redraw_permitted_for_drain(
+            &mut last_redraw,
+            &mut seen_agents,
+            "agent-a",
+            t0 + Duration::from_millis(150),
+        ),
+        "later progress for the same agent in the same drain is coalesced"
+    );
+
+    let mut next_drain_seen_agents = HashSet::new();
+    assert!(
+        agent_progress_redraw_permitted_for_drain(
+            &mut last_redraw,
+            &mut next_drain_seen_agents,
+            "agent-a",
+            t0 + Duration::from_millis(150),
+        ),
+        "a later drain can repaint that agent again after the throttle window"
+    );
+}
