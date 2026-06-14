@@ -41,9 +41,10 @@ can run on top of those modes when the task needs a continuous workflow.
   header state instead of feeling like a hidden background task.
 - **Fleet** is the execution substrate: headless workers, local/SSH hosts,
   trust policy, leases, heartbeats, logs, receipts, and status APIs.
-- **Swarm** is the high-fanout behavior inside WhaleFlow. It should compile into
-  a WhaleFlow-backed fleet run instead of reviving the old `agent_swarm` tool
-  surface.
+- **Swarm** is the high-fanout behavior inside WhaleFlow. It is gated in
+  v0.8.61: `/swarm` must not revive prompt-only `agent_open` fanout. It should
+  compile into a WhaleFlow-backed fleet run once the durable worker and goal
+  re-dispatch substrate is available.
 
 UI guidance: keep the main transcript calm. A WhaleFlow run should appear as a
 compact progress card plus Work/Agents sidebar rows with phase names, worker

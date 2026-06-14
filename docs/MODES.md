@@ -12,9 +12,11 @@ a concrete model and thinking level; they are not TUI modes and are not part of
 the `Tab` cycle.
 
 WhaleFlow is also separate from the `Tab` mode cycle. It is the visible
-continuous-work layer for repeatable workflows, fleet workers, and swarm-style
-fanout. The active mode still controls permissions; WhaleFlow controls whether a
-large task is planned into a resumable workflow with its own progress view.
+continuous-work layer for repeatable workflows and fleet workers. Swarm-style
+high-fanout remains gated in v0.8.61 until it routes through durable
+Fleet-backed workers instead of prompt-only `agent_open` fanout. The active mode
+still controls permissions; WhaleFlow controls whether a large task is planned
+into a resumable workflow with its own progress view.
 
 Each user turn includes a small `<turn_meta>` block with the current local date
 and the concrete model sent to the provider. When `--model auto` is active, the

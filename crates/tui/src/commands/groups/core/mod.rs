@@ -372,32 +372,23 @@ pub fn agent(_app: &mut App, arg: Option<&str>) -> CommandResult {
     )
 }
 
-/// Run a WhaleFlow-backed multi-agent swarm: high-fanout headless sub-agents
-/// over one task. This is an overlay on the current mode (Agent/Plan/YOLO), not
-/// a fourth mode — it instructs the model to decompose and fan out, collecting
-/// compact result summaries rather than child transcripts (#3178).
+/// Gate the old prompt-only swarm fanout until it can route through durable
+/// WhaleFlow/Fleet workers (#3218).
 pub fn swarm(_app: &mut App, arg: Option<&str>) -> CommandResult {
-    let (max_depth, task) = match parse_depth_prefixed_arg(arg, 1) {
+    let (_max_depth, task) = match parse_depth_prefixed_arg(arg, 1) {
         Ok(parsed) => parsed,
         Err(message) => return CommandResult::error(message),
     };
-    let task = match task {
-        Some(task) if !task.trim().is_empty() => task.trim().to_string(),
-        _ => {
-            return CommandResult::error(
-                "Usage: /swarm [N] <task>\n\n\
-                 Runs a multi-agent swarm: decomposes the task and fans out \
-                 headless sub-agents (recursive depth N, 0-3, default 1), then \
-                 synthesizes their results.",
-            );
-        }
-    };
-    let message = format!(
-        "Run a multi-agent swarm for this task: {task:?}. Decompose it into independent, parallelizable subtasks and open one headless sub-agent per subtask with `agent_open` (pass `max_depth: {max_depth}` for nested delegation, and an `agent_type`/role that fits each subtask — explore for research, review for verification, implementer for edits). Run them concurrently; poll each worker with nonblocking `agent_eval`, synthesize results as they arrive, and pass `block:true` only for a deliberate final wait. Keep the fanout proportional to the task, and verify any claimed side effects before reporting success."
-    );
-    CommandResult::with_message_and_action(
-        format!("Dispatching a swarm at depth {max_depth}..."),
-        AppAction::SendMessage(message),
+    if !matches!(task.as_deref().map(str::trim), Some(task) if !task.is_empty()) {
+        return CommandResult::error(
+            "Usage: /swarm [N] <task>\n\n\
+             /swarm is currently gated. Use /goal for a persistent objective \
+             or /agent for a single sub-agent while durable Fleet-backed \
+             swarm workers are still landing.",
+        );
+    }
+    CommandResult::error(
+        "/swarm is gated in v0.8.61: prompt-only agent_open fanout is disabled until the durable Train-3 worker/goal re-dispatch substrate lands. Use /goal for the persistent objective or /agent [N] <task> for one bounded sub-agent.",
     )
 }
 
@@ -431,4 +422,57 @@ fn resolves_to_existing_file(app: &App, input: &str) -> bool {
         app.workspace.join(path)
     };
     candidate.is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_app() -> App {
+        let options = crate::tui::app::TuiOptions {
+            model: "deepseek-v4-pro".to_string(),
+            workspace: std::path::PathBuf::from("/tmp/test-workspace"),
+            config_path: None,
+            config_profile: None,
+            allow_shell: false,
+            use_alt_screen: true,
+            use_mouse_capture: false,
+            use_bracketed_paste: true,
+            max_subagents: 1,
+            skills_dir: std::path::PathBuf::from("/tmp/test-skills"),
+            memory_path: std::path::PathBuf::from("memory.md"),
+            notes_path: std::path::PathBuf::from("notes.txt"),
+            mcp_config_path: std::path::PathBuf::from("mcp.json"),
+            use_memory: false,
+            start_in_agent_mode: false,
+            skip_onboarding: true,
+            initial_input: None,
+            resume_session_id: None,
+            yolo: false,
+        };
+        App::new(options, &crate::config::Config::default())
+    }
+
+    #[test]
+    fn swarm_is_gated_until_durable_worker_substrate_lands() {
+        let mut app = create_test_app();
+        let result = swarm(&mut app, Some("inspect five files"));
+
+        assert!(result.is_error);
+        assert!(result.action.is_none());
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("gated")
+        );
+        assert!(
+            result
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Train-3")
+        );
+    }
 }
