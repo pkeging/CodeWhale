@@ -50,6 +50,7 @@ mod mcp;
 mod mcp_server;
 mod memory;
 mod model_inventory;
+mod model_registry;
 mod model_routing;
 mod models;
 mod network_policy;
