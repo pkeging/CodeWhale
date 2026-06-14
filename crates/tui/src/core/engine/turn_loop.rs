@@ -77,7 +77,7 @@ impl Engine {
         let mut stream_retry_attempts: u32 = 0;
         let mut last_dispatched_messages_revision: Option<u64> = None;
 
-        'turn_loop: loop {
+        loop {
             if self.cancel_token.is_cancelled() {
                 let _ = self.tx_event.send(Event::status("Request cancelled")).await;
                 return (TurnOutcomeStatus::Interrupted, None);
@@ -1088,74 +1088,29 @@ impl Engine {
                     completions.push(c);
                 }
                 if completions.is_empty() {
-                    loop {
-                        let running = {
-                            let mgr = self.subagent_manager.read().await;
-                            mgr.running_count()
-                        };
-                        if !should_hold_turn_for_subagents(completions.len(), running) {
-                            break;
-                        }
+                    // #3216: do NOT barrier the parent on running children.
+                    // Launching a sub-agent is not the same as joining it — the
+                    // parent ends its turn and stays responsive. Running children
+                    // are background work; their results return via the
+                    // completion sentinel on a later turn (or the model polls
+                    // with `agent_eval`). Stale children are filtered out of
+                    // `running_count` by the manager's heartbeat, so they neither
+                    // block nor inflate the surfaced count. (Previously the parent
+                    // waited in a select! loop here until a completion or the
+                    // heartbeat timeout, which read as a hard TUI freeze.)
+                    // Cancellation and steering are handled at the top of the step
+                    // loop; stale-agent cleanup is the manager's responsibility.
+                    let running = {
+                        let mgr = self.subagent_manager.read().await;
+                        mgr.running_count()
+                    };
+                    if running > 0 {
                         let _ = self
                             .tx_event
                             .send(Event::status(format!(
-                                "Waiting on {running} sub-agent(s) to complete..."
+                                "Turn ending with {running} sub-agent(s) still running in the background; they'll report when done (or use agent_eval to check)."
                             )))
                             .await;
-                        tokio::select! {
-                            biased;
-                            () = self.cancel_token.cancelled() => {
-                                let _ = self
-                                    .tx_event
-                                    .send(Event::status(
-                                        "Request cancelled while waiting for sub-agents",
-                                    ))
-                                    .await;
-                                return (TurnOutcomeStatus::Interrupted, None);
-                            }
-                            Some(c) = self.rx_subagent_completion.recv() => {
-                                completions.push(c);
-                                while let Ok(extra) = self.rx_subagent_completion.try_recv() {
-                                    completions.push(extra);
-                                }
-                                break;
-                            }
-                            Some(steer) = self.rx_steer.recv() => {
-                                let trimmed = steer.trim().to_string();
-                                if !trimmed.is_empty() {
-                                    self.session
-                                        .working_set
-                                        .observe_user_message(&trimmed, &self.session.workspace);
-                                    self.add_session_message(
-                                        self.user_text_message_with_turn_metadata(trimmed.clone()),
-                                    )
-                                    .await;
-                                    let _ = self
-                                        .tx_event
-                                        .send(Event::status(format!(
-                                            "Steer input accepted: {}",
-                                            summarize_text(&trimmed, 120)
-                                        )))
-                                        .await;
-                                }
-                                turn.next_step();
-                                continue 'turn_loop;
-                            }
-                            () = tokio::time::sleep(self.config.subagent_heartbeat_timeout) => {
-                                let auto_cancelled = {
-                                    let mut mgr = self.subagent_manager.write().await;
-                                    mgr.cleanup(std::time::Duration::from_secs(60 * 60))
-                                };
-                                if auto_cancelled > 0 {
-                                    let _ = self
-                                        .tx_event
-                                        .send(Event::status(format!(
-                                            "Auto-cancelled {auto_cancelled} stale sub-agent(s) after no progress"
-                                        )))
-                                        .await;
-                                }
-                            }
-                        }
                     }
                 }
                 if !completions.is_empty() {
@@ -2492,7 +2447,15 @@ XML unless the user explicitly asks to debug sub-agent internals.\n\n\
 }
 
 fn should_hold_turn_for_subagents(queued_completions: usize, running_children: usize) -> bool {
-    queued_completions > 0 || running_children > 0
+    // #3216: launching sub-agents must NOT barrier the parent turn. Only queued
+    // completions (work already finished that must be surfaced into the
+    // transcript) hold the turn open. Running children are background work — the
+    // parent ends its turn and their results arrive via the completion sentinel
+    // on a later turn, or the model polls them with `agent_eval`. The
+    // `running_children` argument is kept for call-site clarity and the
+    // background-status message, but deliberately no longer gates the hold.
+    let _ = running_children;
+    queued_completions > 0
 }
 
 fn should_skip_runtime_prompt_only_dispatch(
@@ -2780,10 +2743,16 @@ mod tests {
     }
 
     #[test]
-    fn turn_holds_open_for_running_or_completed_subagents() {
+    fn turn_holds_only_for_queued_completions_not_running_children() {
+        // #3216: queued completions hold the turn open so they get surfaced...
         assert!(should_hold_turn_for_subagents(1, 0));
-        assert!(should_hold_turn_for_subagents(0, 1));
+        // ...but running children no longer barrier the parent — launching a
+        // sub-agent is not the same as joining it (results arrive via the
+        // completion sentinel / agent_eval).
+        assert!(!should_hold_turn_for_subagents(0, 1));
         assert!(!should_hold_turn_for_subagents(0, 0));
+        // Queued completions hold regardless of how many children are running.
+        assert!(should_hold_turn_for_subagents(2, 5));
     }
 
     #[test]
