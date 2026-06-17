@@ -19,7 +19,7 @@ for Claude-based agents working in this repository.
 ## Scratch Integration Branches
 
 - For release queues, create disposable local branches from the real landing
-  branch, for example `scratch/v0.8.59-pr-train-YYYYMMDD`.
+  branch, for example `scratch/vX.Y.Z-pr-train-YYYYMMDD`.
 - Use the scratch branch to merge or cherry-pick candidate PR heads in batches
   and learn which conflicts, tests, and overlaps are real.
 - Do not ship the scratch branch itself. It may contain noisy merge commits,
@@ -36,9 +36,10 @@ for Claude-based agents working in this repository.
 
 ## v0.8.62 Release Work
 
-- The active branch is `hunter/0.8.62-glm-subagents` (worktree
-  `CodeWhale-0.8.62-glm-subagents`). 0.8.61 has shipped; do all new work here,
-  never on `main`.
+- The active branch is `hunter/0.8.62-glm-subagents`. This repo lives on
+  multiple devices, so do not hard-code a checkout path — work in whichever
+  local checkout you have and confirm with `git branch --show-current` before
+  editing. 0.8.61 has shipped; do all new work here, never on `main`.
 - Base release triage on the GitHub `v0.8.62` milestone
   (`gh issue list --repo Hmbown/CodeWhale --milestone "v0.8.62" --state open`)
   unless Hunter gives a newer branch/milestone.
