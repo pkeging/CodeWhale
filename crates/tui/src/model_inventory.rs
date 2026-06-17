@@ -126,6 +126,7 @@ impl ModelInventory {
         })
     }
 
+    #[allow(dead_code)] // kept for future inventory consumers
     pub(crate) fn active_default(&self) -> Option<&ModelRouteCandidate> {
         self.candidates
             .iter()

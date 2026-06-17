@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use crate::client::DeepSeekClient;
 use crate::config::{ApiProvider, Config, normalize_model_name_for_provider};
