@@ -10,15 +10,16 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Result;
+use codewhale_execpolicy::{AskForApproval, ExecPolicyContext};
 use codewhale_protocol::runtime::DynamicToolSpec;
 use futures_util::StreamExt;
 use futures_util::stream::FuturesUnordered;
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::{Mutex as AsyncMutex, RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
 
@@ -377,6 +378,8 @@ pub struct EngineConfig {
     /// itself must be inside the workspace). Mirrors the
     /// `workspace_follow_symlinks` setting.
     pub workspace_follow_symlinks: bool,
+    /// Ask-only permission rules loaded from sibling `permissions.toml`.
+    pub exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine,
 }
 
 impl Default for EngineConfig {
@@ -439,6 +442,7 @@ impl Default for EngineConfig {
             verbosity: None,
             tools: None,
             workspace_follow_symlinks: false,
+            exec_policy_engine: codewhale_execpolicy::ExecPolicyEngine::new(Vec::new(), Vec::new()),
         }
     }
 }
@@ -1006,9 +1010,25 @@ impl Engine {
                 "Tool 'exec_shell' is disabled by feature flag".to_string(),
             ))
         } else if let Some(spec) = registry.get(&tool_name) {
-            let approval_required = spec.approval_requirement() != ApprovalRequirement::Auto
+            let mut approval_required = spec.approval_requirement() != ApprovalRequirement::Auto
                 && !registry.context().auto_approve;
-            if approval_required {
+            let mut approval_description = spec.description().to_string();
+            let mut approval_force_prompt = false;
+            let ask_rule_decision = exec_shell_ask_rule_decision(
+                &self.config,
+                &tool_name,
+                &tool_input,
+                &self.session.workspace,
+                self.session.approval_mode,
+            );
+            if let Some(ExecShellAskRuleDecision::Prompt(reason)) = ask_rule_decision.as_ref() {
+                approval_required = true;
+                approval_description = reason.clone();
+                approval_force_prompt = true;
+            }
+            if let Some(ExecShellAskRuleDecision::Block(reason)) = ask_rule_decision {
+                Err(ToolError::permission_denied(reason))
+            } else if approval_required {
                 emit_tool_audit(json!({
                     "event": "tool.approval_required",
                     "tool_id": tool_id.clone(),
@@ -1029,10 +1049,11 @@ impl Engine {
                         id: tool_id.clone(),
                         tool_name: tool_name.clone(),
                         input: tool_input.clone(),
-                        description: spec.description().to_string(),
+                        description: approval_description,
                         approval_key,
                         approval_grouping_key,
                         intent_summary: None,
+                        approval_force_prompt,
                     })
                     .await;
 
@@ -3041,6 +3062,54 @@ fn agent_approval_mode_for_turn(
         crate::tui::approval::ApprovalMode::Auto
     } else {
         approval_mode
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum ExecShellAskRuleDecision {
+    Prompt(String),
+    Block(String),
+}
+
+pub(super) fn exec_shell_ask_rule_decision(
+    config: &EngineConfig,
+    tool_name: &str,
+    tool_input: &Value,
+    workspace: &Path,
+    approval_mode: crate::tui::approval::ApprovalMode,
+) -> Option<ExecShellAskRuleDecision> {
+    if tool_name != "exec_shell" {
+        return None;
+    }
+    let command = tool_input.get("command").and_then(Value::as_str)?;
+    let cwd = workspace.to_string_lossy();
+    let ask_for_approval = match approval_mode {
+        crate::tui::approval::ApprovalMode::Never => AskForApproval::Never,
+        crate::tui::approval::ApprovalMode::Auto | crate::tui::approval::ApprovalMode::Suggest => {
+            AskForApproval::OnFailure
+        }
+    };
+    let decision = config
+        .exec_policy_engine
+        .check(ExecPolicyContext {
+            command,
+            cwd: cwd.as_ref(),
+            tool: Some(tool_name),
+            path: None,
+            ask_for_approval,
+            sandbox_mode: None,
+        })
+        .ok()?;
+    if !decision.allow {
+        Some(ExecShellAskRuleDecision::Block(
+            decision.reason().to_string(),
+        ))
+    } else if decision.requires_approval {
+        Some(ExecShellAskRuleDecision::Prompt(
+            decision.reason().to_string(),
+        ))
+    } else {
+        None
     }
 }
 

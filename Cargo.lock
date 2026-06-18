@@ -980,6 +980,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "codewhale-config",
+ "codewhale-execpolicy",
  "codewhale-protocol",
  "codewhale-release",
  "codewhale-secrets",
