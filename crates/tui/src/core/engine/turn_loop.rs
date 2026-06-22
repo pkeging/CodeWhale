@@ -1602,25 +1602,35 @@ impl Engine {
                     approval_required = true;
                 }
 
-                if blocked_error.is_none()
-                    && let Some(decision) = exec_shell_ask_rule_decision(
+                if blocked_error.is_none() {
+                    let ask_rule_decision = exec_shell_ask_rule_decision(
                         &self.config,
                         &tool_name,
                         &tool_input,
                         &self.session.workspace,
                         self.session.approval_mode,
                     )
-                {
-                    match decision {
-                        ExecShellAskRuleDecision::Prompt(reason) => {
-                            approval_required = true;
-                            approval_description = reason;
-                            approval_force_prompt = true;
-                        }
-                        ExecShellAskRuleDecision::Block(reason) => {
-                            approval_required = false;
-                            approval_force_prompt = false;
-                            blocked_error = Some(ToolError::permission_denied(reason));
+                    .or_else(|| {
+                        file_tool_ask_rule_decision(
+                            &self.config,
+                            &tool_name,
+                            &tool_input,
+                            &self.session.workspace,
+                            self.session.approval_mode,
+                        )
+                    });
+                    if let Some(decision) = ask_rule_decision {
+                        match decision {
+                            ToolAskRuleDecision::Prompt(reason) => {
+                                approval_required = true;
+                                approval_description = reason;
+                                approval_force_prompt = true;
+                            }
+                            ToolAskRuleDecision::Block(reason) => {
+                                approval_required = false;
+                                approval_force_prompt = false;
+                                blocked_error = Some(ToolError::permission_denied(reason));
+                            }
                         }
                     }
                 }
