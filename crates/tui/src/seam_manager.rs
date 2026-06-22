@@ -104,6 +104,10 @@ pub struct SeamMetadata {
     /// Model that produced it.
     #[allow(dead_code)]
     pub model: String,
+    /// Tags inferred from the summarized conversation segment.
+    /// Used to cross-reference with user memory for enriched summaries.
+    #[allow(dead_code)]
+    pub tags: Vec<String>,
 }
 
 /// The Flash seam manager — produces `<archived_context>` blocks.
@@ -156,7 +160,43 @@ impl SeamManager {
         message_count.saturating_sub(verbatim_messages)
     }
 
+    /// Extract topic tags from a set of messages.
+    /// Scans message content for capitalized technical terms, file paths,
+    /// and common topic patterns. Used to cross-reference with user memory.
+    #[must_use]
+    pub fn extract_topic_tags(messages: &[&Message]) -> Vec<String> {
+        let mut candidates: Vec<String> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for msg in messages {
+            for block in &msg.content {
+                if let ContentBlock::Text { text, .. } = block {
+                    for word in text.split_whitespace() {
+                        let clean = word.trim_matches(|c: char| c.is_ascii_punctuation());
+                        if clean.len() < 4 {
+                            continue;
+                        }
+                        // Capitalized words (technologies, frameworks, languages)
+                        if clean.starts_with(|c: char| c.is_uppercase())
+                            && !clean.starts_with(|c: char| c.is_ascii_digit())
+                        {
+                            let lower = clean.to_lowercase();
+                            if seen.insert(lower.clone()) {
+                                candidates.push(lower);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        candidates.truncate(10);
+        candidates
+    }
+
     /// Produce a soft seam for the given message range and level.
+    ///
+    /// `memory_context` is optional — when provided, it is included in the
+    /// summarization prompt so the seam can reference user memory preferences
+    /// relevant to the conversation segment.
     ///
     /// Returns the `<archived_context>` XML block as a string, ready to
     /// be appended as an assistant message.
@@ -168,6 +208,7 @@ impl SeamManager {
         end_idx: usize,
         workspace: Option<&Path>,
         pinned_indices: &[usize],
+        memory_context: Option<&str>,
     ) -> Result<String> {
         if messages.is_empty() || start_idx >= end_idx {
             return Ok(String::new());
@@ -203,8 +244,11 @@ impl SeamManager {
             return Ok(String::new());
         }
 
+        // Extract topic tags for seam metadata
+        let topic_tags = Self::extract_topic_tags(&to_summarize);
+
         let summary = self
-            .summarize_messages(&to_summarize, level, start_idx, end_idx)
+            .summarize_messages(&to_summarize, level, start_idx, end_idx, memory_context)
             .await?;
 
         let density_label = match level {
@@ -227,6 +271,7 @@ impl SeamManager {
                 token_estimate,
                 timestamp,
                 model: self.config.seam_model.clone(),
+                tags: topic_tags,
             });
         }
 
@@ -243,6 +288,9 @@ impl SeamManager {
 
     /// Re-compact existing seams into a higher-level block. Consumes prior
     /// `<archived_context>` content and fuses it with new messages.
+    ///
+    /// `memory_context` is optional user-memory context to include in the
+    /// recompaction prompt for enriched seam quality.
     pub async fn recompact(
         &self,
         existing_seams: &[String],
@@ -250,6 +298,7 @@ impl SeamManager {
         level: u8,
         start_idx: usize,
         end_idx: usize,
+        memory_context: Option<&str>,
     ) -> Result<String> {
         let mut input = String::from(
             "## Prior Context Summaries\n\n\
@@ -279,6 +328,11 @@ impl SeamManager {
             _ => (L3_MAX_TOKENS, 400),
         };
 
+        let memory_section = memory_context
+            .filter(|c| !c.trim().is_empty())
+            .map(|c| format!("\n\n## Relevant User Memory\n\n{c}\n"))
+            .unwrap_or_default();
+
         let request = MessageRequest {
             model: self.config.seam_model.clone(),
             messages: vec![Message {
@@ -289,7 +343,7 @@ impl SeamManager {
                          Preserve: decisions made, file paths, error messages, \
                          constraints, hypotheses, open questions, and task state. \
                          Drop: greeting, filler, repeated information. \
-                         Keep it under {word_limit} words.\n\n{input}"
+                         Keep it under {word_limit} words.\n\n{input}{memory_section}"
                     ),
                     cache_control: None,
                 }],
@@ -329,6 +383,9 @@ impl SeamManager {
         let token_estimate = summary.len() / 4;
         let timestamp = Utc::now();
 
+        // Extract topic tags from recompacted messages
+        let topic_tags = Self::extract_topic_tags(new_messages);
+
         // Record this recompacted seam.
         {
             let mut seams = self.active_seams.lock().await;
@@ -339,6 +396,7 @@ impl SeamManager {
                 token_estimate,
                 timestamp,
                 model: self.config.seam_model.clone(),
+                tags: topic_tags,
             });
         }
 
@@ -359,6 +417,7 @@ impl SeamManager {
         level: u8,
         start_idx: usize,
         end_idx: usize,
+        memory_context: Option<&str>,
     ) -> Result<String> {
         let mut conversation = String::new();
 
@@ -392,6 +451,11 @@ impl SeamManager {
             }
         }
 
+        let memory_section = memory_context
+            .filter(|c| !c.trim().is_empty())
+            .map(|c| format!("\n\n## Relevant User Memory\n\nConsider these user preferences and conventions from the user's memory file (they may be relevant to the conversation segment):\n\n{c}\n"))
+            .unwrap_or_default();
+
         let (max_tokens, word_limit) = match level {
             1 => (L1_MAX_TOKENS, 800),
             2 => (L2_MAX_TOKENS, 600),
@@ -410,7 +474,7 @@ impl SeamManager {
                          command invocations, error messages, tool-result facts, constraints \
                          discovered, hypotheses being tested, and open questions. \
                          Drop: greetings, filler, repeated information, and thinking blocks. \
-                         Keep it under {word_limit} words.\n\n---\n\n{conversation}"
+                         Keep it under {word_limit} words.{memory_section}\n\n---\n\n{conversation}"
                     ),
                     cache_control: None,
                 }],

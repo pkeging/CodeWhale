@@ -23,7 +23,7 @@ use std::path::Path;
 use super::CommandResult;
 use crate::tui::app::App;
 
-const MEMORY_USAGE: &str = "/memory [show|path|clear|edit|help]";
+const MEMORY_USAGE: &str = "/memory [show|path|clear|edit|tags|search <query>|search --tag <tag>|help]";
 
 fn memory_help(path: &Path) -> String {
     format!(
@@ -31,16 +31,58 @@ fn memory_help(path: &Path) -> String {
          Usage: {MEMORY_USAGE}\n\n\
          Current path: {}\n\n\
          Subcommands:\n\
-           /memory          Show the resolved path and current contents\n\
-           /memory show     Alias for the no-arg form\n\
-           /memory path     Print just the resolved path\n\
-           /memory clear    Replace the file contents with an empty marker\n\
-           /memory edit     Print the editor command for this file\n\
-           /memory help     Show this help\n\n\
+           /memory                    Show the resolved path and current contents\n\
+           /memory show               Alias for the no-arg form\n\
+           /memory path               Print just the resolved path\n\
+           /memory clear              Replace the file contents with an empty marker\n\
+           /memory edit               Print the editor command for this file\n\
+           /memory tags               List all tags with occurrence counts\n\
+           /memory search <query>     Search memory by text (body + tags)\n\
+           /memory search --tag <t>   Search memory by tag (exact match)\n\
+           /memory help               Show this help\n\n\
          Quick capture: type `# foo` in the composer to append a timestamped\n\
          bullet without firing a turn.",
         path.display()
     )
+}
+
+/// Split the argument into subcommand and remaining args.
+fn split_subcommand(arg: Option<&str>) -> (&str, Option<&str>) {
+    match arg {
+        Some(a) => {
+            let trimmed = a.trim();
+            match trimmed.find(char::is_whitespace) {
+                Some(pos) => (&trimmed[..pos], Some(trimmed[pos + 1..].trim_start())),
+                None => (trimmed, None),
+            }
+        }
+        None => ("show", None),
+    }
+}
+
+fn render_entries(entries: &[&crate::memory::MemoryEntry], prefix: &str) -> String {
+    let mut lines = String::new();
+    for entry in entries {
+        let _ = std::fmt::Write::write_fmt(
+            &mut lines,
+            format_args!("\n{prefix}- ({}) {}", entry.timestamp, entry.body),
+        );
+        if !entry.tags.is_empty() {
+            let _ = std::fmt::Write::write_fmt(
+                &mut lines,
+                format_args!(
+                    " {}",
+                    entry
+                        .tags
+                        .iter()
+                        .map(|t| format!("#{t}"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                ),
+            );
+        }
+    }
+    lines
 }
 
 pub fn memory(app: &mut App, arg: Option<&str>) -> CommandResult {
@@ -51,7 +93,7 @@ pub fn memory(app: &mut App, arg: Option<&str>) -> CommandResult {
     }
 
     let path = app.memory_path.clone();
-    let sub = arg.unwrap_or("show").trim();
+    let (sub, rest) = split_subcommand(arg);
 
     match sub {
         "" | "show" => {
@@ -69,6 +111,65 @@ pub fn memory(app: &mut App, arg: Option<&str>) -> CommandResult {
             CommandResult::message(body)
         }
         "path" => CommandResult::message(path.display().to_string()),
+        "tags" => match fs::read_to_string(&path) {
+            Ok(content) => {
+                let tags = crate::memory::list_tags(&content);
+                if tags.is_empty() {
+                    CommandResult::message("no tags found in memory file")
+                } else {
+                    let mut lines = format!("Tags in {}:\n", path.display());
+                    for (i, (tag, count)) in tags.iter().enumerate() {
+                        let _ = std::fmt::Write::write_fmt(
+                            &mut lines,
+                            format_args!("\n  {}. #{}  ({})", i + 1, tag, count),
+                        );
+                    }
+                    CommandResult::message(lines)
+                }
+            }
+            Err(_) => CommandResult::message(format!(
+                "{}\n(file does not exist yet)",
+                path.display()
+            )),
+        },
+        "search" => {
+            let Some(query) = rest.filter(|r| !r.is_empty()) else {
+                return CommandResult::error(
+                    "Usage: /memory search <query>  or  /memory search --tag <tag>",
+                );
+            };
+            let content = match fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(_) => {
+                    return CommandResult::message(format!(
+                        "memory file does not exist yet at {}",
+                        path.display()
+                    ));
+                }
+            };
+            let entries = crate::memory::parse_all(&content);
+
+            // Check for --tag flag
+            let results: Vec<&crate::memory::MemoryEntry> = if query.starts_with("--tag ") {
+                let tag = query.trim_start_matches("--tag ").trim();
+                crate::memory::search_by_tags(&entries, &[tag])
+            } else {
+                crate::memory::search_text(&entries, query)
+            };
+
+            if results.is_empty() {
+                CommandResult::message(format!(
+                    "no memory entries matching \"{query}\""
+                ))
+            } else {
+                let body = render_entries(&results, "");
+                CommandResult::message(format!(
+                    "{} matching entry(ies) for \"{query}\":{}",
+                    results.len(),
+                    body
+                ))
+            }
+        }
         "clear" => match fs::write(&path, "") {
             Ok(()) => CommandResult::message(format!("memory cleared: {}", path.display())),
             Err(err) => CommandResult::error(format!("failed to clear {}: {err}", path.display())),
@@ -123,7 +224,7 @@ mod tests {
         let mut app = create_test_app_with_memory(&tmpdir, true);
         let result = memory(&mut app, Some("help"));
         let msg = result.message.expect("help should return text");
-        assert!(msg.contains("Usage: /memory [show|path|clear|edit|help]"));
+        assert!(msg.contains("Usage: /memory [show|path|clear|edit|tags|search <query>|search --tag <tag>|help]"));
         assert!(msg.contains("/memory edit"));
         assert!(msg.contains(app.memory_path.to_string_lossy().as_ref()));
     }

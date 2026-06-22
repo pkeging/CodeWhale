@@ -43,6 +43,11 @@ impl ToolSpec for RememberTool {
                 "note": {
                     "type": "string",
                     "description": "The single-sentence durable note to remember."
+                },
+                "tags": {
+                    "type": "array",
+                    "items": { "type": "string", "description": "A hashtag (with or without leading #)" },
+                    "description": "Optional tags to attach to this entry for future retrieval. Use tags like \"project:codewhale\", \"type:preference\", or \"scope:config\"."
                 }
             },
             "required": ["note"]
@@ -69,13 +74,49 @@ impl ToolSpec for RememberTool {
             )
         })?;
 
-        crate::memory::append_entry(path, note).map_err(|err| {
+        // Extract optional tags, normalizing leading #
+        let tags: Vec<String> = input
+            .get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|t| {
+                        let trimmed = t.trim().trim_start_matches('#');
+                        if trimmed.is_empty() { String::new() } else { trimmed.to_string() }
+                    })
+                    .filter(|t| !t.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Auto-tag when the model didn't provide explicit tags
+        let final_tags: Vec<String> = if tags.is_empty() {
+            crate::memory::auto_tag(note, 5)
+        } else {
+            tags
+        };
+        let tag_refs: Vec<&str> = final_tags.iter().map(String::as_str).collect();
+        crate::memory::append_entry(path, note, &tag_refs).map_err(|err| {
             ToolError::execution_failed(format!("failed to append to {}: {err}", path.display()))
         })?;
 
+        let tag_msg = if final_tags.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " [{}]",
+                final_tags
+                    .iter()
+                    .map(|t| format!("#{t}"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
+        };
         Ok(ToolResult::success(format!(
-            "remembered: {}",
-            note.trim_start_matches('#').trim()
+            "remembered: {}{}",
+            note.trim_start_matches('#').trim(),
+            tag_msg
         )))
     }
 }
@@ -134,5 +175,102 @@ mod tests {
         let tool = RememberTool;
         let err = tool.execute(json!({}), &ctx).await.unwrap_err();
         assert!(err.to_string().to_lowercase().contains("note"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn appends_with_tags() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("memory.md");
+        let ctx = ctx_with_memory(path.clone());
+
+        let tool = RememberTool;
+        let result = tool
+            .execute(json!({"note": "use 4 spaces", "tags": ["indentation", "rust"]}), &ctx)
+            .await
+            .expect("ok");
+        assert!(result.success);
+
+        let body = std::fs::read_to_string(&path).expect("read");
+        assert!(body.contains("use 4 spaces"), "{body}");
+        assert!(body.contains("#indentation"), "{body}");
+        assert!(body.contains("#rust"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn appends_with_tags_normalizes_leading_hash() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("memory.md");
+        let ctx = ctx_with_memory(path.clone());
+
+        let tool = RememberTool;
+        let result = tool
+            .execute(json!({"note": "prefer tabs", "tags": ["#indentation", " #spacing"]}), &ctx)
+            .await
+            .expect("ok");
+        assert!(result.success);
+
+        let body = std::fs::read_to_string(&path).expect("read");
+        assert!(body.contains("#indentation"), "{body}");
+        assert!(body.contains("#spacing"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn appends_with_empty_tags_skips() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("memory.md");
+        let ctx = ctx_with_memory(path.clone());
+
+        let tool = RememberTool;
+        let result = tool
+            .execute(json!({"note": "bare note", "tags": []}), &ctx)
+            .await
+            .expect("ok");
+        assert!(result.success);
+
+        let body = std::fs::read_to_string(&path).expect("read");
+        assert!(body.contains("bare note"), "{body}");
+        assert!(!body.contains('#'), "no tag char expected: {body}");
+    }
+
+    #[tokio::test]
+    async fn auto_tags_when_no_tags_provided() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("memory.md");
+        let ctx = ctx_with_memory(path.clone());
+
+        let tool = RememberTool;
+        let result = tool
+            .execute(json!({"note": "Use CodeWhale with DeepSeek V4"}), &ctx)
+            .await
+            .expect("ok");
+        assert!(result.success);
+        // auto_tag should extract "codewhale" and "deepseek" from capitalized words
+        assert!(result.content.contains("#codewhale"), "result: {}", result.content);
+        assert!(result.content.contains("#deepseek"), "result: {}", result.content);
+
+        let body = std::fs::read_to_string(&path).expect("read");
+        assert!(body.contains("Use CodeWhale with DeepSeek V4"), "{body}");
+        assert!(body.contains("#codewhale"), "{body}");
+        assert!(body.contains("#deepseek"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn explicit_tags_override_auto_tag() {
+        let tmp = tempdir().unwrap();
+        let path = tmp.path().join("memory.md");
+        let ctx = ctx_with_memory(path.clone());
+
+        let tool = RememberTool;
+        let result = tool
+            .execute(json!({"note": "Use CodeWhale", "tags": ["manual"]}), &ctx)
+            .await
+            .expect("ok");
+        assert!(result.success);
+        // Should NOT auto-tag since explicit tags were provided
+        assert!(result.content.contains("#manual"), "result: {}", result.content);
+        assert!(!result.content.contains("#codewhale"), "should not auto-tag: {}", result.content);
+
+        let body = std::fs::read_to_string(&path).expect("read");
+        assert!(body.contains("#manual"), "{body}");
     }
 }
