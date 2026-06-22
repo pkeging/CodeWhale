@@ -2784,6 +2784,44 @@ impl Engine {
             .working_set
             .pinned_message_indices(&self.session.messages, &self.session.workspace);
 
+        // Build memory context from user's memory file for enriched seams.
+        // Limit injected entries to prevent seam bloat.
+        const MAX_MEMORY_CONTEXT_ENTRIES: usize = 20;
+        let memory_context: Option<String> = if self.config.memory_enabled {
+            let path = &self.config.memory_path;
+            std::fs::read_to_string(path).ok().map(|content| {
+                let index = crate::memory_index::MemoryIndex::from_content(&content);
+                if index.is_empty() {
+                    return String::new();
+                }
+                // Extract topic tags from the messages to be summarized
+                let recent_msgs: Vec<&crate::models::Message> = (0..msg_range_end)
+                    .filter_map(|i| self.session.messages.get(i))
+                    .collect();
+                let topics = crate::seam_manager::SeamManager::extract_topic_tags(&recent_msgs);
+
+                let matched: Vec<&crate::memory::MemoryEntry> = if topics.is_empty() {
+                    // No specific topics — include recent memory entries as general context
+                    index.entries().iter().rev().take(MAX_MEMORY_CONTEXT_ENTRIES).collect()
+                } else {
+                    let topic_refs: Vec<&str> = topics.iter().map(String::as_str).collect();
+                    let by_tag = index.search_by_tags(&topic_refs);
+                    if by_tag.is_empty() {
+                        index.entries().iter().rev().take(MAX_MEMORY_CONTEXT_ENTRIES).collect()
+                    } else {
+                        by_tag.into_iter().take(MAX_MEMORY_CONTEXT_ENTRIES).collect()
+                    }
+                };
+                matched
+                    .iter()
+                    .map(|e| format!("- ({}) {} #{}", e.timestamp, e.body, e.tags.join(" #")))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+        } else {
+            None
+        };
+
         let _ = self
             .tx_event
             .send(Event::status(format!(
@@ -2802,6 +2840,7 @@ impl Engine {
                     msg_range_end,
                     Some(&self.session.workspace),
                     &pinned,
+                    memory_context.as_deref(),
                 )
                 .await
             {
@@ -2816,7 +2855,14 @@ impl Engine {
                 .filter_map(|i| self.session.messages.get(i))
                 .collect();
             match seam_mgr
-                .recompact(&existing_seams, &recent, level, 0, msg_range_end)
+                .recompact(
+                    &existing_seams,
+                    &recent,
+                    level,
+                    0,
+                    msg_range_end,
+                    memory_context.as_deref(),
+                )
                 .await
             {
                 Ok(text) => text,

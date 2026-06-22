@@ -1044,9 +1044,24 @@ fn is_memory_quick_add(input: &str) -> bool {
 /// memory directory becomes visible without crashing the composer.
 fn handle_memory_quick_add(app: &mut App, input: &str, config: &Config) {
     let path = config.memory_path();
-    match crate::memory::append_entry(&path, input) {
+    let inline_tags = crate::memory::extract_tags(input);
+    match crate::memory::append_entry(&path, input, &[]) {
         Ok(()) => {
-            app.status_message = Some(format!("memory: appended to {}", path.display()));
+            let tag_hint = if inline_tags.is_empty() {
+                let note = input.trim_start_matches('#').trim();
+                let auto_tags = crate::memory::auto_tag(note, 3);
+                if auto_tags.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        " [auto: {}]",
+                        auto_tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" ")
+                    )
+                }
+            } else {
+                format!(" [{}]", inline_tags.join(" "))
+            };
+            app.status_message = Some(format!("memory: appended to {}{}", path.display(), tag_hint));
         }
         Err(err) => {
             app.status_message = Some(format!(
