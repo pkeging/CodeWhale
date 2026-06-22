@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::memory::MemoryEntry;
 
@@ -86,6 +86,26 @@ impl MemoryIndex {
         &self.entries
     }
 
+    /// Intersect two sorted, deduped slices and return the intersection
+    /// in sorted order (two-pointer merge, O(m+n)).
+    fn intersect_sorted(a: &[usize], b: &[usize]) -> Vec<usize> {
+        let mut result = Vec::new();
+        let mut i = 0;
+        let mut j = 0;
+        while i < a.len() && j < b.len() {
+            if a[i] < b[j] {
+                i += 1;
+            } else if a[i] > b[j] {
+                j += 1;
+            } else {
+                result.push(a[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+        result
+    }
+
     /// Search by tags (OR logic — any matching tag). Returns matching
     /// entries in display order.
     #[must_use]
@@ -93,18 +113,34 @@ impl MemoryIndex {
         if tags.is_empty() {
             return self.entries.iter().collect();
         }
-        let mut matched = HashSet::new();
+        let mut matched = Vec::new();
         for tag in tags {
             let key = tag.trim_start_matches('#').to_lowercase();
             if let Some(indices) = self.tag_index.get(&key) {
                 for &i in indices {
-                    matched.insert(i);
+                    if !matched.contains(&i) {
+                        matched.push(i);
+                    }
                 }
             }
         }
-        let mut indices: Vec<usize> = matched.into_iter().collect();
-        indices.sort_unstable();
-        indices.iter().map(|&i| &self.entries[i]).collect()
+        matched.sort_unstable();
+        matched.iter().map(|&i| &self.entries[i]).collect()
+    }
+
+    /// Union of multiple sorted, deduped slices. Each input is sorted
+    /// and deduped; the result is sorted and deduped (O(N) merge).
+    fn union_sorted(slices: &[&[usize]]) -> Vec<usize> {
+        let total: usize = slices.iter().map(|s| s.len()).sum();
+        if total == 0 {
+            return Vec::new();
+        }
+        // Collect all elements, sort, dedup
+        // This is simpler than an n-way merge and fast enough for our scale.
+        let mut all: Vec<usize> = slices.iter().flat_map(|s| s.iter().copied()).collect();
+        all.sort_unstable();
+        all.dedup();
+        all
     }
 
     /// Full-text search (AND logic — all query words must match). Returns
@@ -130,24 +166,21 @@ impl MemoryIndex {
             return self.entries.iter().collect();
         }
 
-        // Find intersection of all word matches
-        let mut result: Option<HashSet<usize>> = None;
-        for word in &words {
-            if let Some(indices) = self.text_index.get(word) {
-                let set: HashSet<usize> = indices.iter().copied().collect();
-                result = match result {
-                    Some(existing) => Some(existing.intersection(&set).copied().collect()),
-                    None => Some(set),
-                };
-            } else {
-                // A required word has no matches → empty result
-                return Vec::new();
-            }
-        }
+        // Find intersection of all word matches using sorted slices
+        let mut iter = words.iter();
+        let first = match iter.next().and_then(|w| self.text_index.get(w)) {
+            Some(v) => v.as_slice(),
+            None => return Vec::new(),
+        };
 
-        let mut indices: Vec<usize> = result.unwrap_or_default().into_iter().collect();
-        indices.sort_unstable();
-        indices.iter().map(|&i| &self.entries[i]).collect()
+        let result = iter.fold(first.to_vec(), |acc, word| {
+            match self.text_index.get(word) {
+                Some(indices) => Self::intersect_sorted(&acc, indices.as_slice()),
+                None => Vec::new(),
+            }
+        });
+
+        result.iter().map(|&i| &self.entries[i]).collect()
     }
 
     /// Combined search: filter by tags (OR) and text (AND).
@@ -158,24 +191,23 @@ impl MemoryIndex {
             return self.entries.iter().collect();
         }
 
-        let entry_set: HashSet<usize> = (0..self.entries.len()).collect();
-
-        let tag_indices: HashSet<usize> = if tags.is_empty() {
-            entry_set.clone()
+        let tag_indices: Vec<usize> = if tags.is_empty() {
+            (0..self.entries.len()).collect()
         } else {
-            let mut s = HashSet::new();
-            for tag in tags {
-                let key = tag.trim_start_matches('#').to_lowercase();
-                if let Some(indices) = self.tag_index.get(&key) {
-                    for &i in indices {
-                        s.insert(i);
-                    }
-                }
+            let matched: Vec<&[usize]> = tags
+                .iter()
+                .filter_map(|tag| {
+                    let key = tag.trim_start_matches('#').to_lowercase();
+                    self.tag_index.get(&key).map(|v| v.as_slice())
+                })
+                .collect();
+            if matched.is_empty() {
+                return Vec::new();
             }
-            s
+            Self::union_sorted(&matched)
         };
 
-        let text_indices: HashSet<usize> = if let Some(query) = text {
+        let text_indices: Vec<usize> = if let Some(query) = text {
             let words: Vec<String> = query
                 .split_whitespace()
                 .filter_map(|w| {
@@ -191,32 +223,28 @@ impl MemoryIndex {
                 })
                 .collect();
             if words.is_empty() {
-                entry_set
+                (0..self.entries.len()).collect()
             } else {
-                let mut result: Option<HashSet<usize>> = None;
-                for word in &words {
-                    if let Some(indices) = self.text_index.get(word) {
-                        let set: HashSet<usize> = indices.iter().copied().collect();
-                        result = Some(match result {
-                            Some(existing) => existing.intersection(&set).copied().collect(),
-                            None => set,
-                        });
-                    } else {
-                        return Vec::new();
+                let mut iter = words.iter();
+                let first = match iter.next().and_then(|w| self.text_index.get(w)) {
+                    Some(v) => v.as_slice().to_vec(),
+                    None => return Vec::new(),
+                };
+                iter.fold(first, |acc, word| {
+                    match self.text_index.get(word) {
+                        Some(indices) => Self::intersect_sorted(&acc, indices.as_slice()),
+                        None => Vec::new(),
                     }
-                }
-                result.unwrap_or_default()
+                })
             }
         } else {
-            entry_set
+            (0..self.entries.len()).collect()
         };
 
-        let mut indices: Vec<usize> = tag_indices
-            .intersection(&text_indices)
-            .copied()
-            .collect();
-        indices.sort_unstable();
-        indices.iter().map(|&i| &self.entries[i]).collect()
+        Self::intersect_sorted(&tag_indices, &text_indices)
+            .iter()
+            .map(|&i| &self.entries[i])
+            .collect()
     }
 
     /// Get all unique tags with their occurrence counts, sorted by

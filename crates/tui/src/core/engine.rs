@@ -2814,7 +2814,13 @@ impl Engine {
                 };
                 matched
                     .iter()
-                    .map(|e| format!("- ({}) {} #{}", e.timestamp, e.body, e.tags.join(" #")))
+                    .map(|e| {
+                        if e.tags.is_empty() {
+                            format!("- ({}) {}", e.timestamp, e.body)
+                        } else {
+                            format!("- ({}) {} #{}", e.timestamp, e.body, e.tags.join(" #"))
+                        }
+                    })
                     .collect::<Vec<_>>()
                     .join("\n")
             })

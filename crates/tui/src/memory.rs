@@ -162,11 +162,11 @@ pub fn append_entry(path: &Path, entry: &str, extra_tags: &[&str]) -> io::Result
         ));
     }
 
-    // Merge and deduplicate tags
+    // Merge and deduplicate tags (case-insensitive to avoid e.g. #Rust / #rust)
     let mut all_tags: Vec<&str> = Vec::new();
     for t in inline_tags.into_iter().chain(extra_tags.iter().copied()) {
         let tag = t.trim_start_matches('#');
-        if !tag.is_empty() && !all_tags.contains(&tag) {
+        if !tag.is_empty() && !all_tags.iter().any(|existing| existing.eq_ignore_ascii_case(tag)) {
             all_tags.push(tag);
         }
     }

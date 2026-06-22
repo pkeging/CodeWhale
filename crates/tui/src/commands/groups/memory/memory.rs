@@ -52,7 +52,15 @@ fn split_subcommand(arg: Option<&str>) -> (&str, Option<&str>) {
         Some(a) => {
             let trimmed = a.trim();
             match trimmed.find(char::is_whitespace) {
-                Some(pos) => (&trimmed[..pos], Some(trimmed[pos + 1..].trim_start())),
+                Some(pos) => {
+                    let sub = &trimmed[..pos];
+                    let rest = trimmed[pos..].trim_start();
+                    if rest.is_empty() {
+                        (sub, None)
+                    } else {
+                        (sub, Some(rest))
+                    }
+                }
                 None => (trimmed, None),
             }
         }
@@ -152,6 +160,11 @@ pub fn memory(app: &mut App, arg: Option<&str>) -> CommandResult {
             // Check for --tag flag
             let results: Vec<&crate::memory::MemoryEntry> = if query.starts_with("--tag ") {
                 let tag = query.trim_start_matches("--tag ").trim();
+                if tag.is_empty() {
+                    return CommandResult::error(
+                        "Usage: /memory search --tag <tag>  (tag must not be empty)",
+                    );
+                }
                 crate::memory::search_by_tags(&entries, &[tag])
             } else {
                 crate::memory::search_text(&entries, query)
