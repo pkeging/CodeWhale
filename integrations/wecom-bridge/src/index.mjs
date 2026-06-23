@@ -453,6 +453,15 @@ async function decideApproval(chatId, action, frame) {
     method: "POST",
     body: { decision, remember }
   });
+
+  // Clear activeTurnId so the user can send follow-up messages
+  // immediately instead of being blocked by activeTurnBlock
+  // while the SSE stream processes the turn cancellation.
+  await threadStore.patchChat(chatId, {
+    activeTurnId: null,
+    updatedAt: new Date().toISOString()
+  });
+
   await replyText(frame, `Approval ${approvalId}: ${decision}${remember ? " and remember" : ""}`);
 }
 
