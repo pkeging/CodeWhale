@@ -3304,7 +3304,7 @@ async fn run_doctor(config: &Config, workspace: &Path, config_path_override: Opt
     }
     if crate::settings::detected_legacy_windows_console_host() {
         println!(
-            "  {} legacy Windows console host → low_motion + fancy_animations=false + synchronized_output=off (auto)",
+            "  {} legacy Windows console host → low_motion + fancy_animations=false + bracketed_paste=false + synchronized_output=off (auto)",
             "•".truecolor(sky_r, sky_g, sky_b)
         );
         any_quirk = true;
@@ -6026,8 +6026,8 @@ async fn run_interactive(
     let use_alt_screen = should_use_alt_screen(cli, config);
     let use_mouse_capture = should_use_mouse_capture(cli, config, use_alt_screen);
     let use_bracketed_paste = crate::settings::Settings::load()
-        .map(|s| s.bracketed_paste)
-        .unwrap_or(true);
+        .map(|s| s.effective_bracketed_paste())
+        .unwrap_or_else(|_| !crate::settings::detected_legacy_windows_console_host());
 
     // Auto-install bundled system skills (e.g. skill-creator) on first launch.
     // Errors are non-fatal: log a warning and continue.
