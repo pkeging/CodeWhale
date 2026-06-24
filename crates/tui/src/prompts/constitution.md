@@ -620,7 +620,7 @@ survive compaction. Think once, reference many times.
 - **Recursive LM (long inputs / parallel reasoning)**: `rlm_open`, `rlm_eval`, `rlm_configure`, `rlm_close` — open a named Python REPL over a file/string/URL, run deterministic and semantic analysis, return compact results or `var_handle`s, then close when done.
 - **Large symbolic outputs**: `handle_read` — read bounded slices, counts, ranges, or JSONPath projections from returned `var_handle`s without replaying the whole payload.
 - **Skills**: `load_skill` (#434) — when the user names a skill or the task matches one in the `## Skills` section above, call this with the skill id to pull its `SKILL.md` body and companion-file list into context in one tool call. Faster than `read_file` + `list_dir`.
-- **Other**: `code_execution` (Python sandbox), `validate_data` (JSON/TOML), `request_user_input`, `finance` (market quotes), `tool_search_tool_regex`, `tool_search_tool_bm25` (deferred tool discovery).
+- **Other**: `code_execution` (Python sandbox), `validate_data` (JSON/TOML), `request_user_input` (ask the user through the modal UX), `finance` (market quotes), `tool_search` (`match: "bm25"` by default, or `"regex"` for pattern discovery of deferred tools).
 
 Multiple `tool_calls` in one turn run in parallel. `web_search` returns `ref_id`s — cite as `(ref_id)`.
 

@@ -1314,6 +1314,10 @@ fn non_yolo_mode_retains_default_defer_policy() {
     ));
     assert!(!should_default_defer_tool("web_search", &always_load));
     assert!(!should_default_defer_tool("write_file", &always_load));
+    assert!(should_default_defer_tool(
+        REQUEST_USER_INPUT_NAME,
+        &always_load
+    ));
     assert!(should_default_defer_tool("task_shell_start", &always_load));
     assert!(should_default_defer_tool("task_shell_wait", &always_load));
     assert!(should_default_defer_tool("git_blame", &always_load));
@@ -1788,6 +1792,37 @@ fn model_tool_catalog_defers_non_core_native_tools_in_yolo_mode() {
     assert_eq!(defer_loading("read_file"), Some(false));
     assert_eq!(defer_loading("project_map"), Some(true));
     assert_eq!(defer_loading("mcp_server_write"), Some(false));
+}
+
+#[test]
+fn request_user_input_stays_deferred_but_can_be_dynamically_activated() {
+    let always_load = HashSet::new();
+    let catalog = build_model_tool_catalog(
+        vec![api_tool("read_file"), api_tool(REQUEST_USER_INPUT_NAME)],
+        Vec::new(),
+        AppMode::Agent,
+        &always_load,
+    );
+
+    assert_eq!(
+        catalog
+            .iter()
+            .find(|tool| tool.name == REQUEST_USER_INPUT_NAME)
+            .and_then(|tool| tool.defer_loading),
+        Some(true)
+    );
+
+    let mut active = initial_active_tools(&catalog);
+    assert!(!active.contains(REQUEST_USER_INPUT_NAME));
+    active.insert(REQUEST_USER_INPUT_NAME.to_string());
+
+    let active_tools = active_tools_for_step(&catalog, &active, false);
+    assert!(
+        active_tools
+            .iter()
+            .any(|tool| tool.name == REQUEST_USER_INPUT_NAME),
+        "dynamic active tools should expose the question modal without making it eager by default"
+    );
 }
 
 #[test]
@@ -3378,7 +3413,12 @@ fn self_generated_fake_approvals_cannot_authorize_work() {
 }
 
 #[test]
-fn review_only_external_input_gets_read_only_policy_until_write_is_explicit() {
+fn review_only_external_input_keeps_explicit_mode_with_advisory_hint() {
+    // Review-only wording must NEVER silently override an explicitly chosen
+    // mode or strip its tools. The heuristic only activates the existing
+    // request_user_input modal tool so the model can ask focused follow-ups.
+
+    // Agent-mode request: the requested mode/tools must be preserved unchanged.
     let agent = effective_input_policy(
         UserInputProvenance::ExternalUser,
         AppMode::Agent,
@@ -3388,18 +3428,21 @@ fn review_only_external_input_gets_read_only_policy_until_write_is_explicit() {
         true,
         crate::tui::approval::ApprovalMode::Auto,
     );
-    assert_eq!(agent.mode, AppMode::Plan);
+    assert_eq!(agent.mode, AppMode::Agent);
     assert!(agent.allow_shell);
-    assert!(!agent.trust_mode);
-    assert!(!agent.auto_approve);
+    assert!(agent.trust_mode);
+    assert!(agent.auto_approve);
     assert!(matches!(
         agent.approval_mode,
-        crate::tui::approval::ApprovalMode::Suggest
+        crate::tui::approval::ApprovalMode::Auto
     ));
+    assert_eq!(agent.dynamic_active_tools, vec![REQUEST_USER_INPUT_NAME]);
     assert!(agent.status.as_deref().is_some_and(|status| {
-        status.contains("read-only Plan tools") && status.contains("explicit fix/edit/commit")
+        status.contains("keeping the current mode") && status.contains("request_user_input")
     }));
 
+    // Yolo-mode request: previously this was silently downgraded to Plan and
+    // exec_shell/write_file/etc. were stripped. It must now stay as requested.
     let yolo = effective_input_policy(
         UserInputProvenance::ExternalUser,
         AppMode::Yolo,
@@ -3409,16 +3452,17 @@ fn review_only_external_input_gets_read_only_policy_until_write_is_explicit() {
         true,
         crate::tui::approval::ApprovalMode::Auto,
     );
-    assert_eq!(yolo.mode, AppMode::Plan);
+    assert_eq!(yolo.mode, AppMode::Yolo);
     assert!(yolo.allow_shell);
-    assert!(!yolo.trust_mode);
-    assert!(!yolo.auto_approve);
+    assert!(yolo.trust_mode);
+    assert!(yolo.auto_approve);
     assert!(matches!(
         yolo.approval_mode,
-        crate::tui::approval::ApprovalMode::Suggest
+        crate::tui::approval::ApprovalMode::Auto
     ));
+    assert_eq!(yolo.dynamic_active_tools, vec![REQUEST_USER_INPUT_NAME]);
     assert!(yolo.status.as_deref().is_some_and(|status| {
-        status.contains("read-only Plan tools") && status.contains("explicit fix/edit/commit")
+        status.contains("keeping the current mode") && status.contains("request_user_input")
     }));
 
     let explicit_write = effective_input_policy(
@@ -3431,6 +3475,7 @@ fn review_only_external_input_gets_read_only_policy_until_write_is_explicit() {
         crate::tui::approval::ApprovalMode::Suggest,
     );
     assert_eq!(explicit_write.mode, AppMode::Agent);
+    assert!(explicit_write.dynamic_active_tools.is_empty());
     assert!(explicit_write.status.is_none());
 }
 
@@ -3905,6 +3950,32 @@ fn tool_search_activates_discovered_deferred_tools() {
     .expect("search succeeds");
     assert!(result.success);
     assert!(active.contains("read_file"));
+}
+
+#[test]
+fn tool_search_can_discover_request_user_input_modal_tool() {
+    let always_load = HashSet::new();
+    let mut catalog = build_model_tool_catalog(
+        vec![api_tool(REQUEST_USER_INPUT_NAME)],
+        Vec::new(),
+        AppMode::Agent,
+        &always_load,
+    );
+    ensure_advanced_tooling(&mut catalog, AppMode::Agent, &always_load);
+
+    let mut active = initial_active_tools(&catalog);
+    assert!(!active.contains(REQUEST_USER_INPUT_NAME));
+
+    let result = execute_tool_search(
+        TOOL_SEARCH_NAME,
+        &json!({"query":"ask user question"}),
+        &catalog,
+        &mut active,
+    )
+    .expect("search succeeds");
+
+    assert!(result.success);
+    assert!(active.contains(REQUEST_USER_INPUT_NAME));
 }
 
 fn tool_search_catalog_with_matches(count: usize) -> Vec<Tool> {

@@ -2404,6 +2404,7 @@ impl Engine {
             tools,
             input_policy.mode,
             force_update_plan_first,
+            input_policy.dynamic_active_tools,
         ))
         .catch_unwind()
         .await;
@@ -3269,6 +3270,7 @@ struct EffectiveInputPolicy {
     trust_mode: bool,
     auto_approve: bool,
     approval_mode: crate::tui::approval::ApprovalMode,
+    dynamic_active_tools: Vec<&'static str>,
     status: Option<String>,
 }
 
@@ -3285,6 +3287,7 @@ fn effective_input_policy(
     let mut trust_mode = trust_mode;
     let mut auto_approve = auto_approve;
     let mut approval_mode = approval_mode;
+    let mut dynamic_active_tools = Vec::new();
     let mut status = None;
 
     if !provenance.can_authorize_work() {
@@ -3307,14 +3310,12 @@ fn effective_input_policy(
             ));
         }
     } else if is_review_only_user_intent(content) {
-        mode = AppMode::Plan;
-        trust_mode = false;
-        auto_approve = false;
-        if matches!(approval_mode, crate::tui::approval::ApprovalMode::Auto) {
-            approval_mode = crate::tui::approval::ApprovalMode::Suggest;
-        }
+        // Advisory only: never silently override an explicitly chosen mode
+        // or strip its tools. Surface the question modal dynamically so the
+        // model can ask focused follow-ups without inflating every tool prompt.
+        dynamic_active_tools.push(REQUEST_USER_INPUT_NAME);
         status = Some(
-            "Review/inspection request detected; using read-only Plan tools for this turn. Add an explicit fix/edit/commit instruction to allow writes.".to_string(),
+            "Review/inspection request detected; keeping the current mode and exposing request_user_input for focused follow-up questions.".to_string(),
         );
     }
 
@@ -3324,6 +3325,7 @@ fn effective_input_policy(
         trust_mode,
         auto_approve,
         approval_mode,
+        dynamic_active_tools,
         status,
     }
 }

@@ -110,6 +110,7 @@ impl Engine {
         tools: Option<Vec<Tool>>,
         mode: AppMode,
         force_update_plan_first: bool,
+        dynamic_active_tools: Vec<&'static str>,
     ) -> (TurnOutcomeStatus, Option<String>) {
         // Signal to the terminal / taskbar that a turn is in progress
         // (OSC 9 ; 4 indeterminate progress + title spinner).
@@ -139,6 +140,11 @@ impl Engine {
             }
         }
         let mut active_tool_names = initial_active_tools(&tool_catalog);
+        active_tool_names.extend(
+            dynamic_active_tools
+                .into_iter()
+                .map(std::string::ToString::to_string),
+        );
         let mut goal_continuations_this_turn = 0u32;
 
         // Outer stream-retry counter: when the chunked-transfer connection
