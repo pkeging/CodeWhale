@@ -7,11 +7,7 @@ mod mcp;
 mod network;
 mod task;
 
-use crate::commands::traits::{Command, CommandGroup, CommandInfo, FunctionCommand, RegisterCommand};
-use crate::localization::MessageId;
-use crate::tui::app::App;
-
-use crate::commands::CommandResult;
+use crate::commands::traits::{Command, CommandGroup, FunctionCommand, RegisterCommand};
 
 pub struct UtilityCommands;
 
@@ -38,22 +34,6 @@ impl CommandGroup for UtilityCommands {
                 network::NetworkCmd::info(),
                 network::NetworkCmd::execute,
             )),
-            // `/plugins` is registered here but remains discretionary for
-            // FEAT-007 extraction. The CommandInfo and dispatch function
-            // stay inline until scope is explicitly widened.
-            Box::new(FunctionCommand::new(&PLUGINS_INFO, run_plugins)),
         ]
     }
-}
-
-/// `/plugins` command metadata — discretionary, kept inline.
-static PLUGINS_INFO: CommandInfo = CommandInfo {
-    name: "plugins",
-    aliases: &["plugin"],
-    usage: "/plugins [name]",
-    description_id: MessageId::CmdPluginDescription,
-};
-
-fn run_plugins(app: &mut App, arg: Option<&str>) -> CommandResult {
-    crate::commands::plugins::plugins(app, arg)
 }
