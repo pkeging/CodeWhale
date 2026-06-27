@@ -69,7 +69,7 @@ pub fn plugin_command(_app: &mut App, arg: Option<&str>) -> CommandResult {
         }
         _ => {
             let name = parts.join(" ");
-            show_plugin_detail(name)
+            show_plugin_detail(&name)
         }
     }
 }
