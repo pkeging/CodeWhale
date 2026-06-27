@@ -85,6 +85,7 @@ mod runtime_api;
 mod runtime_log;
 mod runtime_threads;
 mod sandbox;
+mod scorecard;
 mod seam_manager;
 #[allow(dead_code)]
 mod session_diagnostics;
@@ -284,6 +285,8 @@ enum Commands {
     Apply(ApplyArgs),
     /// Run the offline evaluation harness (no network/LLM calls)
     Eval(EvalArgs),
+    /// Score a run's token/cache/cost from recorded turns; flag regressions vs a baseline (#3388)
+    Scorecard(ScorecardArgs),
     /// Manage MCP servers
     Mcp {
         #[command(subcommand)]
@@ -712,6 +715,24 @@ struct SessionDiagnosticsArgs {
     #[arg(value_name = "JSONL")]
     path: PathBuf,
     /// Emit machine-readable JSON with redacted source handles
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+struct ScorecardArgs {
+    /// JSON file with the recorded turns to score: an array of
+    /// `{ "turn_id", "model", "usage": {…} }` (the shape the TurnEnd hook emits).
+    #[arg(long, value_name = "FILE")]
+    input: PathBuf,
+    /// Optional baseline scorecard-metrics JSON to compare against. When set,
+    /// the command exits non-zero if any metric regresses past the threshold.
+    #[arg(long, value_name = "FILE")]
+    baseline: Option<PathBuf>,
+    /// Regression threshold, in percent increase over the baseline.
+    #[arg(long, default_value_t = 5.0)]
+    threshold: f64,
+    /// Emit machine-readable JSON instead of the human summary.
     #[arg(long, default_value_t = false)]
     json: bool,
 }
@@ -1290,6 +1311,7 @@ async fn main() -> Result<()> {
             }
             Commands::Apply(args) => run_apply(args),
             Commands::Eval(args) => run_eval(args),
+            Commands::Scorecard(args) => run_scorecard(args),
             Commands::Mcp { command } => {
                 let config = load_config_from_cli(&cli)?;
                 let workspace = resolve_workspace(&cli);
@@ -1466,6 +1488,68 @@ fn run_eval(args: EvalArgs) -> Result<()> {
         Ok(())
     } else {
         bail!("offline evaluation harness reported failure")
+    }
+}
+
+/// Score a run's token/cache/cost from recorded turns and (optionally) flag
+/// regressions against a committed baseline. Offline: reads recorded usage from
+/// a JSON file, reuses the pricing layer, never calls a model. Exits non-zero
+/// when a baseline is supplied and a metric regresses past the threshold, so it
+/// can be wired as a release gate (#3388).
+fn run_scorecard(args: ScorecardArgs) -> Result<()> {
+    use crate::scorecard::{RecordedTurn, Scorecard, ScorecardMetrics, TurnInput};
+
+    let raw = std::fs::read_to_string(&args.input)
+        .with_context(|| format!("failed to read scorecard input {}", args.input.display()))?;
+    let recorded: Vec<RecordedTurn> = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse scorecard input {}", args.input.display()))?;
+
+    let inputs: Vec<TurnInput<'_>> = recorded
+        .iter()
+        .map(|r| TurnInput {
+            turn_id: r.turn_id.clone(),
+            model: r.model.clone(),
+            usage: &r.usage,
+        })
+        .collect();
+    let card = Scorecard::from_turns(&inputs);
+
+    let regressions = match &args.baseline {
+        Some(path) => {
+            let baseline_raw = std::fs::read_to_string(path)
+                .with_context(|| format!("failed to read baseline {}", path.display()))?;
+            let baseline: ScorecardMetrics = serde_json::from_str(&baseline_raw)
+                .with_context(|| format!("failed to parse baseline {}", path.display()))?;
+            card.metrics.regressions_against(&baseline, args.threshold)
+        }
+        None => Vec::new(),
+    };
+
+    if args.json {
+        let out = serde_json::json!({
+            "per_turn": card.per_turn,
+            "metrics": card.metrics,
+            "regressions": regressions,
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        print!("{}", card.to_summary());
+        for r in &regressions {
+            println!(
+                "REGRESSION {}: baseline {:.4} -> current {:.4} (+{:.1}%)",
+                r.metric, r.baseline, r.current, r.pct_increase
+            );
+        }
+    }
+
+    if regressions.is_empty() {
+        Ok(())
+    } else {
+        bail!(
+            "{} metric(s) regressed past the {:.1}% threshold",
+            regressions.len(),
+            args.threshold
+        )
     }
 }
 
