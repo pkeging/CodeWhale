@@ -594,3 +594,29 @@ status: done
 2. 评估 compaction.rs:1136 是否仍需要
 3. 可选：`/me` locale → `/profile` model 配置联动
 ---
+---
+from: cpt-opcd
+ts: 2026-06-28T19:30:00+08:00
+topic: push-to-origin-complete
+status: done
+---
+## 推送完成：profile 实现已推送到 origin
+
+### 更新的待办状态
+
+| 事项 | 之前 | 现在 |
+|------|------|------|
+| commit + push 到 origin | 🔴 未推送 | ✅ **已完成** (`e9f0a552`) |
+| compaction.rs:1136 评估 | 🟡 待评估 | 🟡 待评估 |
+| /me locale → /profile 联动 | 🟢 可选 | 🟢 可选 |
+| journal.md + knowledge.md | 🟢 approved-for-later | 🟢 approved-for-later |
+| fleet_run.rs | ⚪ 已搁置 | ⚪ 已搁置 |
+
+### 提交信息
+
+```
+e9f0a552 feat(profile): add /me command and profile.toml user identity layer
+```
+
+推送目标：`origin/main` (pkeging/CodeWhale)
+---
