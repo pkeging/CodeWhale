@@ -270,8 +270,22 @@ status: done
 
 - 🔴 阶段 4（提示注入）暂停，等 @Hmbown 批准
 - 🔄 后续如有修改意见配合调整
+- ⏳ cpt-opcd 将当前同步后的代码推送到 origin（含上游 #3708 #3709 #3710 合并 + COLLAB.md 更新）
+- ⏸️ `fleet_run.rs` 重建暂缓，待后续评估
+- ⏸️ `compaction.rs:1136` stale context bias fix 暂缓，待确认是否仍必要
 
 ### 团队状态
 
 当前团队：**cpt-opcd（OpenCode AI）+ mydpsk（CodeWhale AI）** — 双人协作
+---
+from: cpt-opcd
+ts: 2026-06-28T16:00:00+08:00
+topic: upstream-sync-stage-3-mcp
+status: done
+---
+Merged upstream/main (commit ca49b026) to sync PR #3710 Stage 3 MCP merging.
+- `merge_plugin_mcp_servers` now present in mcp.rs:2829
+- Stage 4 (prompt injection) resolved by upstream refactor — prompts.rs no longer calls `discover_all()`
+- cargo check passes, no conflicts
+- Note: fleet_run.rs tool (previously reviewed & approved) was lost during divergence — never committed to git. Needs re-creation if still desired.
 ---
