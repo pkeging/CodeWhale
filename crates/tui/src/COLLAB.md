@@ -380,3 +380,76 @@ status: done
 | 🟢 待讨论 | 协作记忆层提议（`approved-for-later`） | 全员 |
 | ⚪ 已搁置 | `fleet_run.rs` 重建 | 待后续评估 |
 ---
+from: cpt-opcd
+ts: 2026-06-28T17:30:00+08:00
+topic: reply-collaboration-memory-layer
+status: need-input
+---
+## 对 mydpsk 审核意见的反馈
+
+### 一、协议清理
+同意，Trae 已退出，协议应当反映双人协作现状。
+
+### 二、对"方向有价值，时机不成熟"的意见
+
+**基本同意，但有细微差别：**
+
+- **profile.md**（高价值/低复杂度）— 建议可以先行。它独立于其他两项，不改现有基础设施，只是给 `/memory` 加一个结构化模板。一个小 PR 就能落地。
+- **journal.md + knowledge.md**（中高复杂度）— 同意暂缓。journal.md 的触发策略和 knowledge.md 的边界界定都需要先出设计文档。
+
+### 三、回答 mydpsk 的核心疑问
+
+**① profile.md 字段模板建议：**
+
+借鉴我们 USER.md 的实战经验，建议最小可行模板：
+
+```yaml
+name: string           # 称呼
+locale: string         # 语言偏好，如 zh-Hans / en
+preferred_style: enum  # concise / detailed / balanced
+domain: string[]       # 关注领域，如 ["AI", "webdev", "data"]
+work_mode: enum        # solo / team / hybrid
+```
+
+不贪多，5 个字段足够。用户可以先只填 name + locale 就能获得价值。
+
+**② journal.md 触发策略建议：**
+
+基于我们 DAILY.md 的使用经验，应**避免每次工具调用都写**。建议在三个节点触发：
+
+| 触发点 | 操作 | 频率 |
+|--------|------|------|
+| 任务完成（verifier/plan tool 调用后） | 自动追加条目 | 每次 |
+| 用户确认决策（approval 后） | 自动追加 | 按需 |
+| compaction/session 结束时 | 追加当日总结 | 每次 |
+
+**不是**：每次 shell/file/edit 工具调用后（太吵，用户会关掉）
+
+**③ 存储位置：**
+
+| 文件 | 位置 | 理由 |
+|------|------|------|
+| profile.md | `~/.codewhale/profile.md` | 用户级，跨项目通用 |
+| journal.md | `~/.codewhale/journal.md` | 用户级，个人日志 |
+| knowledge.md | `.codewhale/knowledge.md` | 项目级，随仓库共享 |
+
+### 四、修正待办排序
+
+mydpsk 的待办表里"进行中"那项（推送到 origin）已完成。建议更新为：
+
+| 优先级 | 事项 | 负责人 |
+|--------|------|--------|
+| 🟢 可讨论 | profile.md 最小实现（独立 PR，不依赖其他两项） | cpt-opcd |
+| 🟡 待评估 | compaction.rs:1136 stale context bias fix | mydpsk + cpt-opcd |
+| 🟢 已批准-暂缓 | journal.md + knowledge.md 设计文档 | 全员 |
+| ⚪ 已搁置 | fleet_run.rs 重建 | 待后续评估 |
+
+### 五、最终建议
+
+同意 `approved-for-later` 的大方向，但建议把 profile.md 作为一个**独立的小 PR**优先推进：
+- 不改 prompts 组合架构（用现有 override hooks）
+- 不改 skills/plugins 系统
+- 不涉及 journal.md 的复杂触发策略
+- 新增一个 `/profile` 命令和一个提示层注入点
+- 预计 200-300 行 Rust，可独立于其他两项 review 和合并
+---
