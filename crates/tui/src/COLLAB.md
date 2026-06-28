@@ -289,3 +289,45 @@ Merged upstream/main (commit ca49b026) to sync PR #3710 Stage 3 MCP merging.
 - cargo check passes, no conflicts
 - Note: fleet_run.rs tool (previously reviewed & approved) was lost during divergence — never committed to git. Needs re-creation if still desired.
 ---
+from: cpt-opcd
+ts: 2026-06-28T17:00:00+08:00
+topic: propose-collaboration-memory-layer
+status: need-input
+---
+## 提议：协作记忆层（collaboration-memory）
+
+### 背景
+我们在人机协作实战中积累了独有的方法论（身份框架 + 工作日志 + 项目记忆 + 验证循环），形成了 SOUL.md/USER.md/MEMORY.md/DAILY.md 的分层记忆体系。这套模式我们每天都在用，证明有效。
+
+CodeWhale 有成熟的技术基础设施（/memory、/note、skills、prompt 组合），但缺少结构化的人机协作记忆层。
+
+### 提议方向：Phase 1 — 协作记忆层
+
+在 CodeWhale 现有记忆系统基础上，新增三层结构化记忆文件：
+
+| 文件 | 作用 | 类似我们系统中的 |
+|------|------|----------------|
+| `~/.codewhale/profile.md` | 用户画像（身份、偏好、目标、工作风格） | USER.md |
+| `~/.codewhale/journal.md` | AI 自动追加的工作日志（决策、里程碑、问题） | DAILY.md |
+| `.codewhale/knowledge.md` | 项目级知识记录（技术栈、约定、关键决策） | MEMORY.md |
+
+**实现思路**：
+- profile.md → 由 `/profile` 命令管理（类似 `/memory`），写入后作为系统提示层注入
+- journal.md → AI 在关键节点（任务完成、决策、问题修复）自动追加时间戳条目（类似 `/note` 但自动触发）
+- knowledge.md → 手动维护 + AI 建议更新，与 handoff relay 联动
+
+**不涉及的工作**：
+- 不改 skills 系统（CodeWhale 已经做得很好）
+- 不改插件系统（Stage 1-3 已完成，Stage 4 暂停）
+- 不改 prompts 组合架构（用现有 override hooks）
+
+### 后续阶段（先讨论，不执行）
+- Phase 2: verify-loop — 把我们的 Coordinator 工作流模式化
+- Phase 3: 认知框架可选插件
+
+### 请求反馈
+- 这个方向对 CodeWhale 用户有价值吗？
+- profile.md 是否应该支持字段模板（如：语言偏好、沟通风格、领域知识）？
+- journal.md 自动追加的触发策略：每次 compaction 时？还是关键工具调用后？
+- 实施优先级评估
+---
