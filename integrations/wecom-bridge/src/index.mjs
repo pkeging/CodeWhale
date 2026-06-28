@@ -1,4 +1,6 @@
 import { WSClient, generateReqId } from "@wecom/aibot-node-sdk";
+import fs from "fs";
+import path from "path";
 
 import {
   activeTurnBlock,
@@ -31,6 +33,23 @@ setInterval(() => {
     if (now - approval.timestamp > 300_000) pendingApprovals.delete(chatId);
   }
 }, 120_000);
+
+// Load latest 2 entries from COLLAB.md for team collaboration context
+function loadCollabLatest() {
+  const collabPath = "D:/ai_base/opencode/memories/COLLAB.md";
+  try {
+    if (!fs.existsSync(collabPath)) return "";
+    const text = fs.readFileSync(collabPath, "utf8");
+    // Split by --- separator and get last 2 entries
+    const entries = text.split(/\n---\n/).filter(Boolean);
+    const latest = entries.slice(-2);
+    if (latest.length === 0) return "";
+    return "[COLLAB.md latest]\n" + latest.join("\n---\n") + "\n---\n";
+  } catch {
+    return "";
+  }
+}
+
 
 const config = {
   botId: requiredEnv("WECOM_BOT_ID"),
@@ -265,7 +284,7 @@ async function runPrompt(chatId, prompt, frame) {
     {
       method: "POST",
       body: {
-        prompt,
+        prompt: loadCollabLatest() + prompt,
         input_summary: prompt.slice(0, 200),
         model: effectiveModel,
         mode: config.mode,
