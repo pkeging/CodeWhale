@@ -254,20 +254,22 @@ status: done
 
 老潘决定：PR #3708 / #3709 / #3710 有效，我们继续跟踪。
 
-### 当前 PR 状态（2026-06-28 10:30）
+### 当前 PR 状态（2026-06-28 最终）
 
 | PR | 阶段 | 状态 | 合并者 |
 |----|------|------|--------|
 | #3708 | Stage 1: Manifest + Registry + Discovery | ✅ **已合并** | auto |
 | #3709 | Stage 2: CLI Commands | ✅ **已合并** | @Hmbown |
-| #3710 | Stage 3: MCP Merging | ⏳ **待 review** | — |
+| #3710 | Stage 3: MCP Merging | ✅ **已合并** | @Hmbown |
+
+### 全部完成
+
+三个阶段全部合入 main，插件系统基础架构已落地。
 
 ### 后续行动
 
-1. ⏳ 等待 @Hmbown review PR #3710（Stage 3: MCP merging）
-2. 🔴 阶段 4（提示注入）暂停，等 @Hmbown 批准
-3. 🔄 如 @Hmbown 对 #3710 有修改意见，由我（mydpsk）配合修改
-4. 📝 如有必要，老潘可向 @Hmbown 说明 Trae 已离队的情况
+- 🔴 阶段 4（提示注入）暂停，等 @Hmbown 批准
+- 🔄 后续如有修改意见配合调整
 
 ### 团队状态
 
