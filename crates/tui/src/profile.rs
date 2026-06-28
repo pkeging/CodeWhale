@@ -148,6 +148,46 @@ pub fn set_field(profile: &mut Profile, key: &str, value: &str) -> Result<(), St
     Ok(())
 }
 
+/// Load both profile and preferences, returning the merged profile.
+/// Explicit profile fields always override learned preferences.
+#[must_use]
+pub fn load_merged(profile_path: &Path, prefs: &crate::preferences::Preferences) -> Profile {
+    let mut merged = load(profile_path).unwrap_or_default();
+
+    // Only fill fields not explicitly set by the user.
+    if merged.preferred_style.is_none() {
+        if let Some(style) = crate::preferences::preferred_style_from_learned(prefs) {
+            merged.preferred_style = Some(style);
+        }
+    }
+    if merged.domain.is_none() {
+        if let Some(domains) = crate::preferences::domain_from_learned(prefs) {
+            merged.domain = Some(domains);
+        }
+    }
+    if merged.work_mode.is_none() {
+        if let Some(mode) = crate::preferences::work_mode_from_learned(prefs) {
+            merged.work_mode = Some(mode);
+        }
+    }
+
+    merged
+}
+
+/// Render the merged profile as a system prompt block, including learned preferences.
+#[must_use]
+pub fn render_merged_block(merged: &Profile, prefs: &crate::preferences::Preferences) -> Option<String> {
+    let profile_block = render_block(merged);
+    let learned_block = crate::preferences::render_learned_block(prefs);
+
+    match (profile_block, learned_block) {
+        (Some(p), Some(l)) => Some(format!("{p}\n\n{l}")),
+        (Some(p), None) => Some(p),
+        (None, Some(l)) => Some(l),
+        (None, None) => None,
+    }
+}
+
 fn effective_home_dir() -> Option<PathBuf> {
     dirs::home_dir()
 }

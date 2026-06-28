@@ -855,9 +855,12 @@ impl Engine {
             config.memory_enabled && !config.moraine_fallback, // TODO(v0.8.71): remove when Moraine recall stable; see #3490, #3495
             &config.memory_path,
         );
+        let user_prefs = crate::preferences::default_preferences_path()
+            .and_then(|ref path| crate::preferences::load(path))
+            .unwrap_or_default();
         let user_profile_block = crate::profile::default_profile_path()
-            .and_then(|ref path| crate::profile::load(path))
-            .and_then(|ref profile| crate::profile::render_block(profile));
+            .map(|ref path| crate::profile::load_merged(path, &user_prefs))
+            .and_then(|ref merged| crate::profile::render_merged_block(merged, &user_prefs));
         let prompt_goal_objective =
             goal_objective_for_prompt(config.goal_objective.as_deref(), &config.goal_state);
         let system_prompt =
@@ -1292,6 +1295,12 @@ impl Engine {
                 post_turn_snapshot(&post_workspace, post_seq, post_cap, Some(&snapshot_prompt));
             });
         }
+
+        // Post-turn preference learning.
+        let learn_workspace = self.session.workspace.clone();
+        crate::utils::spawn_blocking_supervised("post-shell-turn-learn", move || {
+            crate::preferences::learn_from_workspace(&learn_workspace);
+        });
     }
 
     /// Run the engine event loop
@@ -2614,6 +2623,13 @@ impl Engine {
             });
         }
 
+        // Post-turn preference learning. Fire-and-forget — learns domain
+        // and tool affinity from the workspace and session.
+        let learn_workspace = self.session.workspace.clone();
+        crate::utils::spawn_blocking_supervised("post-turn-learn", move || {
+            crate::preferences::learn_from_workspace(&learn_workspace);
+        });
+
         // ── Cross-turn goal continuation ───────────────────────────────────
         // If the turn completed successfully and a goal is still Active (and
         // under any optional budget), re-dispatch a synthetic continuation
@@ -3208,9 +3224,12 @@ impl Engine {
             self.config.memory_enabled && !self.config.moraine_fallback, // TODO(v0.8.71): remove when Moraine recall stable; see #3490, #3495
             &self.config.memory_path,
         );
+        let user_prefs = crate::preferences::default_preferences_path()
+            .and_then(|ref path| crate::preferences::load(path))
+            .unwrap_or_default();
         let user_profile_block = crate::profile::default_profile_path()
-            .and_then(|ref path| crate::profile::load(path))
-            .and_then(|ref profile| crate::profile::render_block(profile));
+            .map(|ref path| crate::profile::load_merged(path, &user_prefs))
+            .and_then(|ref merged| crate::profile::render_merged_block(merged, &user_prefs));
         let prompt_goal_objective = goal_objective_for_prompt(
             self.config.goal_objective.as_deref(),
             &self.config.goal_state,

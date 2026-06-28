@@ -2,7 +2,7 @@ use crate::commands::CommandResult;
 use std::fs;
 use std::path::PathBuf;
 
-const USAGE: &str = "/me [show|set <field>=<value>|path|clear|help]";
+const USAGE: &str = "/me [show|set <field>=<value>|path|clear|reset-learner|help]";
 
 fn profile_path() -> Option<PathBuf> {
     crate::profile::default_profile_path()
@@ -32,6 +32,7 @@ fn profile(_app: &mut crate::tui::app::App, arg: Option<&str>) -> CommandResult 
         "set" => set_field_command(&path, rest),
         "path" => CommandResult::message(format!("Profile path: {}", path.display())),
         "clear" => clear_profile(&path),
+        "reset-learner" => reset_learner(),
         "help" => CommandResult::message(format!("Usage: {USAGE}")),
         _ => CommandResult::error(format!(
             "unknown subcommand `{command}`. Try `/me help`.\n\nUsage: {USAGE}"
@@ -106,6 +107,18 @@ fn clear_profile(path: &PathBuf) -> CommandResult {
     match fs::write(path, "") {
         Ok(()) => CommandResult::message(format!("Profile cleared: {}", path.display())),
         Err(err) => CommandResult::error(format!("failed to clear profile: {err}")),
+    }
+}
+
+fn reset_learner() -> CommandResult {
+    let prefs_path = match crate::preferences::default_preferences_path() {
+        Some(p) => p,
+        None => return CommandResult::error("could not determine home directory"),
+    };
+    let empty = crate::preferences::Preferences::default();
+    match crate::preferences::save(&prefs_path, &empty) {
+        Ok(()) => CommandResult::message(format!("Learned preferences reset: {}", prefs_path.display())),
+        Err(e) => CommandResult::error(e),
     }
 }
 
