@@ -3,10 +3,13 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use crate::mcp::McpServerConfig;
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct PluginManifest {
     pub plugin: PluginMeta,
     pub skills: Option<PluginSkills>,
+    #[serde(default)]
     pub mcp_servers: Option<HashMap<String, McpServerConfig>>,
     pub when: Option<PluginWhen>,
 }
@@ -22,15 +25,6 @@ pub struct PluginMeta {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PluginSkills {
     pub path: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct McpServerConfig {
-    pub command: String,
-    pub args: Option<Vec<String>>,
-    pub env: Option<HashMap<String, String>>,
-    pub cwd: Option<String>,
-    pub sandbox: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
