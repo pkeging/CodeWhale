@@ -855,6 +855,9 @@ impl Engine {
             config.memory_enabled && !config.moraine_fallback, // TODO(v0.8.71): remove when Moraine recall stable; see #3490, #3495
             &config.memory_path,
         );
+        let user_profile_block = crate::profile::default_profile_path()
+            .and_then(|ref path| crate::profile::load(path))
+            .and_then(|ref profile| crate::profile::render_block(profile));
         let prompt_goal_objective =
             goal_objective_for_prompt(config.goal_objective.as_deref(), &config.goal_state);
         let system_prompt =
@@ -865,6 +868,7 @@ impl Engine {
                 Some(&config.instructions),
                 prompts::PromptSessionContext {
                     user_memory_block: user_memory_block.as_deref(),
+                    user_profile_block: user_profile_block.as_deref(),
                     goal_objective: prompt_goal_objective.as_deref(),
                     project_context_pack_enabled: config.project_context_pack_enabled,
                     locale_tag: &config.locale_tag,
@@ -3204,6 +3208,9 @@ impl Engine {
             self.config.memory_enabled && !self.config.moraine_fallback, // TODO(v0.8.71): remove when Moraine recall stable; see #3490, #3495
             &self.config.memory_path,
         );
+        let user_profile_block = crate::profile::default_profile_path()
+            .and_then(|ref path| crate::profile::load(path))
+            .and_then(|ref profile| crate::profile::render_block(profile));
         let prompt_goal_objective = goal_objective_for_prompt(
             self.config.goal_objective.as_deref(),
             &self.config.goal_state,
@@ -3215,6 +3222,7 @@ impl Engine {
             Some(&self.config.instructions),
             prompts::PromptSessionContext {
                 user_memory_block: user_memory_block.as_deref(),
+                user_profile_block: user_profile_block.as_deref(),
                 goal_objective: prompt_goal_objective.as_deref(),
                 project_context_pack_enabled: self.config.project_context_pack_enabled,
                 locale_tag: &self.config.locale_tag,
