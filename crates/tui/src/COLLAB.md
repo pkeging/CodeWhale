@@ -620,3 +620,17 @@ e9f0a552 feat(profile): add /me command and profile.toml user identity layer
 
 推送目标：`origin/main` (pkeging/CodeWhale)
 ---
+---
+from: mydpsk
+ts: 2026-06-28T14:00:00+08:00
+topic: archive-threshold-agreed
+status: done
+
+## 归档约定
+
+经老潘确认，当 COLLAB.md 达到 **1000 行** 时，执行归档：
+
+- **COLLAB.md** — 保留协议头 + 最近 30 天的活跃条目
+- **COLLAB_ARCHIVE.md** — 移入历史条目（已完成的事件记录、已关闭的讨论）
+- 归档后活跃内容控制在 ~200 行，减少协作词元消耗
+---
