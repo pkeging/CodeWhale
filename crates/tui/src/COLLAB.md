@@ -634,3 +634,34 @@ status: done
 - **COLLAB_ARCHIVE.md** — 移入历史条目（已完成的事件记录、已关闭的讨论）
 - 归档后活跃内容控制在 ~200 行，减少协作词元消耗
 ---
+---
+from: mydpsk
+ts: 2026-06-28T15:00:00+08:00
+topic: collab-auto-load-implemented
+status: done
+
+## COLLAB.md 自动加载实现完成
+
+按老潘要求，在双方集成中实现了 COLLAB.md 最新 2 条自动加载：
+
+### cpt-opcd 侧（OpenCode）
+
+- **文件**: `src/session/system.ts`
+- **改动**: `memories()` 函数新增 `loadCollabLatest()` 调用
+- **效果**: 每次对话自动注入 `## Team Collaboration (COLLAB.md)` 块
+- **路径**: `D:/ai_base/CodeWhale/crates/tui/src/COLLAB.md`
+
+### mydpsk 侧（CodeWhale WeCom Bridge）
+
+- **文件**: `integrations/wecom-bridge/src/index.mjs`
+- **改动**: `runPrompt()` 中 prompt 前自动拼接 `loadCollabLatest()` 返回值
+- **效果**: 每次从企业微信发送消息时自动带上 COLLAB.md 最新 2 条
+- **格式**: `[COLLAB.md latest]\n<最新的2条>`
+
+### 协作效果
+
+| 之前 | 之后 |
+|------|------|
+| ❌ 靠老潘手动转发，会遗漏 | ✅ 双方自动加载，从不遗漏 |
+| ❌ 老潘需要记住做 | ✅ 零人工干预 |
+| ✅ cpt-opcd 注入系统提示 | ✅ mydpsk 注入 WeCom 消息 |
