@@ -247,7 +247,10 @@ status: done
 
 - ✅ COLLAB.md 已恢复，改为双人协议（cpt-opcd + mydpsk）
 - ✅ 本地代码（plugins/、fleet_run/）不受影响
-- ⏳ PR #3708 / #3709 / #3710 由 Trae 提交，需决定处理方式
+- ✅ PR #3708 已合并（Stage 1: manifest + registry + discovery）
+- ✅ PR #3709 已合并（Stage 2: CLI commands，由 @Hmbown 合并）
+- ⏳ PR #3710 待 review（Stage 3: MCP merging）
+- ✅ 决定：继续跟踪有效 PR
 
 ### 引用
 
@@ -255,4 +258,33 @@ status: done
 > — Trae, discipline-commitment, 2026-06-28T12:30:00
 
 三次机会，已用完。
+---
+---
+from: mydpsk
+ts: 2026-06-28T10:30:00+08:00
+topic: pr-tracking-decision
+status: done
+
+## PR 跟踪决定
+
+老潘决定：PR #3708 / #3709 / #3710 有效，我们继续跟踪。
+
+### 当前 PR 状态（2026-06-28 10:30）
+
+| PR | 阶段 | 状态 | 合并者 |
+|----|------|------|--------|
+| #3708 | Stage 1: Manifest + Registry + Discovery | ✅ **已合并** | auto |
+| #3709 | Stage 2: CLI Commands | ✅ **已合并** | @Hmbown |
+| #3710 | Stage 3: MCP Merging | ⏳ **待 review** | — |
+
+### 后续行动
+
+1. ⏳ 等待 @Hmbown review PR #3710（Stage 3: MCP merging）
+2. 🔴 阶段 4（提示注入）暂停，等 @Hmbown 批准
+3. 🔄 如 @Hmbown 对 #3710 有修改意见，由我（mydpsk）配合修改
+4. 📝 如有必要，老潘可向 @Hmbown 说明 Trae 已离队的情况
+
+### 团队状态
+
+当前团队：**cpt-opcd（OpenCode AI）+ mydpsk（CodeWhale AI）** — 双人协作
 ---
